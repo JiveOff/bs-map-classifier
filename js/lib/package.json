@@ -31,11 +31,11 @@
     "./classify": {
       "node":    {
         "import":  { "types": "./types/index.d.ts",    "default": "./src/classify.node.js" },
-        "require": { "types": "./dist/cjs/index.d.ts", "default": "./dist/cjs/classify.js" }
+        "require": { "types": "./dist/cjs/index.d.ts", "default": "./dist/cjs/classify.node.js" }
       },
       "browser": { "types": "./types/index.d.ts",      "default": "./src/classify.browser.js" },
       "import":  { "types": "./types/index.d.ts",      "default": "./src/classify.js" },
-      "require": { "types": "./dist/cjs/index.d.ts",   "default": "./dist/cjs/classify.js" }
+      "require": { "types": "./dist/cjs/index.d.ts",   "default": "./dist/cjs/classify.node.js" }
     },
     "./embedded": {
       "import":  { "types": "./types/index.d.ts",      "default": "./dist/embedded.mjs" },
