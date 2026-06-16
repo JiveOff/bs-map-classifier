@@ -50,7 +50,9 @@ Install from the [latest release](https://github.com/JiveOff/bs-map-classifier/r
 
 ### Userscript
 
-Install via [Tampermonkey](https://www.tampermonkey.net/) or [Violentmonkey](https://violentmonkey.github.io/) — click **[Install userscript](https://github.com/JiveOff/bs-map-classifier/releases/latest/download/bs-pattern-overlay.user.js)**. Opens automatically on [ArcViewer](https://allpoland.github.io/ArcViewer/) and ScoreSaber map pages.
+Install via [Tampermonkey](https://www.tampermonkey.net/) or [Violentmonkey](https://violentmonkey.github.io/) — click **[Install userscript](https://github.com/JiveOff/bs-map-classifier/releases/latest/download/bs-pattern-overlay.user.js)**. Runs automatically on [ArcViewer](https://allpoland.github.io/ArcViewer/), [BeatSaver](https://beatsaver.com) map pages, and ScoreSaber — auto-detects the current map, downloads it from BeatSaver, and overlays a scrollable pattern timeline synced to playback.
+
+![Pattern overlay](docs/overlay.png)
 
 ### Explore the outputs
 
