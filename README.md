@@ -25,8 +25,6 @@ The pooling database is closed but publicly accessible. Map poolers actively mai
 
 ## Using the classifier
 
-### npm library
-
 ```bash
 npm install bs-map-classifier onnxruntime-web
 ```
@@ -52,16 +50,6 @@ Try it instantly in your browser: **[Open in StackBlitz](https://stackblitz.com/
 
 See [`js/lib/README.md`](js/lib/README.md) for the full API — browser usage, custom model paths, `annotatePatterns`, TypeScript types, CJS usage, and a complete BeatSaver fetch example.
 
-### Browser extension
-
-Install from the [latest release](https://github.com/JiveOff/bs-map-classifier/releases/latest) — grab `bs-pattern-overlay-vX.X.X.zip`, unzip it, then load it as an unpacked extension in Chrome (`chrome://extensions` → Load unpacked) or Firefox.
-
-### Userscript
-
-Install via [Tampermonkey](https://www.tampermonkey.net/) or [Violentmonkey](https://violentmonkey.github.io/) — click **[Install userscript](https://github.com/JiveOff/bs-map-classifier/releases/latest/download/bs-pattern-overlay.user.js)**. Runs automatically on [ArcViewer](https://allpoland.github.io/ArcViewer/), [BeatSaver](https://beatsaver.com) map pages, and ScoreSaber — auto-detects the current map, downloads it from BeatSaver, and overlays a scrollable pattern timeline synced to playback.
-
-![Pattern overlay](docs/overlay.png)
-
 ### Explore the outputs
 
 | Resource | Description |
@@ -70,6 +58,24 @@ Install via [Tampermonkey](https://www.tampermonkey.net/) or [Violentmonkey](htt
 | [`data/processed/feature_stats_by_category.json`](https://github.com/JiveOff/bs-map-classifier/blob/main/data/processed/feature_stats_by_category.json) | Per-category feature statistics (mean, std, min, max) |
 | [`docs/RESULTS.md`](https://github.com/JiveOff/bs-map-classifier/blob/main/docs/RESULTS.md) | Full model results with per-class breakdowns |
 | [`docs/PATTERNS.md`](https://github.com/JiveOff/bs-map-classifier/blob/main/docs/PATTERNS.md) | Pattern type reference with images |
+
+---
+
+## Using the overlay
+
+`bs-pattern-overlay` is a browser extension and userscript that runs on top of Beat Saber map viewers. It auto-detects the current map, downloads the zip from BeatSaver, and overlays a scrollable pattern timeline synced to playback — powered by the same classifier.
+
+![Pattern overlay](docs/overlay.png)
+
+### Browser extension
+
+Install from the [latest release](https://github.com/JiveOff/bs-map-classifier/releases/latest) — grab `bs-pattern-overlay-vX.X.X.zip`, unzip it, then load it as an unpacked extension in Chrome (`chrome://extensions` → Load unpacked) or Firefox.
+
+Works on [ArcViewer](https://allpoland.github.io/ArcViewer/), [BeatSaver](https://beatsaver.com) map pages, and ScoreSaber.
+
+### Userscript
+
+Install via [Tampermonkey](https://www.tampermonkey.net/) or [Violentmonkey](https://violentmonkey.github.io/) — click **[Install userscript](https://github.com/JiveOff/bs-map-classifier/releases/latest/download/bs-pattern-overlay.user.js)**. Same sites as the extension; no browser extension store required.
 
 ---
 
