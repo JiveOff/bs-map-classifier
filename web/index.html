@@ -321,19 +321,11 @@
           <input class="field mono-big" id="mapKey" type="text" placeholder="map key (e.g. 2b120)" spellcheck="false" autocomplete="off">
         </div>
         <div class="selects">
-          <select id="key-characteristic">
-            <option value="Standard">Standard</option>
-            <option value="OneSaber">One Saber</option>
-            <option value="NoArrows">No Arrows</option>
-            <option value="90Degree">90°</option>
-            <option value="360Degree">360°</option>
+          <select id="key-characteristic" disabled>
+            <option>— enter key —</option>
           </select>
-          <select id="key-difficulty">
-            <option value="ExpertPlus">Expert+</option>
-            <option value="Expert">Expert</option>
-            <option value="Hard">Hard</option>
-            <option value="Normal">Normal</option>
-            <option value="Easy">Easy</option>
+          <select id="key-difficulty" disabled>
+            <option>— enter key —</option>
           </select>
         </div>
       </div>
@@ -346,19 +338,11 @@
           <div class="drop-label">drop a map zip or click to browse<strong id="zip-name"></strong></div>
         </div>
         <div class="selects">
-          <select id="zip-characteristic">
-            <option value="Standard">Standard</option>
-            <option value="OneSaber">One Saber</option>
-            <option value="NoArrows">No Arrows</option>
-            <option value="90Degree">90°</option>
-            <option value="360Degree">360°</option>
+          <select id="zip-characteristic" disabled>
+            <option>— upload zip —</option>
           </select>
-          <select id="zip-difficulty">
-            <option value="ExpertPlus">Expert+</option>
-            <option value="Expert">Expert</option>
-            <option value="Hard">Hard</option>
-            <option value="Normal">Normal</option>
-            <option value="Easy">Easy</option>
+          <select id="zip-difficulty" disabled>
+            <option>— upload zip —</option>
           </select>
         </div>
       </div>
@@ -405,8 +389,8 @@
   </footer>
 
   <script type="module">
-    import * as ort from 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/ort.min.mjs';
-    ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/';
+    import * as ort from 'https://esm.sh/onnxruntime-web@1.22.0/dist/ort.min.mjs';
+    ort.env.wasm.wasmPaths = 'https://esm.sh/onnxruntime-web@1.22.0/dist/';
     ort.env.wasm.numThreads = 1;
 
     import { setOrtInstance, parseBeatmap, findDatFilename, parseMap } from 'https://esm.sh/bs-map-classifier';
@@ -415,7 +399,9 @@
     setOrtInstance(ort);
 
     const COLORS = { Tech: '#c084fc', Speed: '#fb923c', Accuracy: '#38bdf8', Standard: '#4ade80', Extreme: '#fbbf24' };
-    const RANK   = { ExpertPlus: 5, Expert: 4, Hard: 3, Normal: 2, Easy: 1 };
+    const RANK       = { ExpertPlus: 5, Expert: 4, Hard: 3, Normal: 2, Easy: 1 };
+    const DIFF_LABEL = { ExpertPlus: 'Expert+', Expert: 'Expert', Hard: 'Hard', Normal: 'Normal', Easy: 'Easy' };
+    const CHAR_LABEL = { Standard: 'Standard', OneSaber: 'One Saber', NoArrows: 'No Arrows', '90Degree': '90°', '360Degree': '360°', Lightshow: 'Lightshow', Lawless: 'Lawless' };
 
     let classifierPromise = null;
     function getClassifier() {
@@ -431,6 +417,68 @@
     const decode     = buf => new TextDecoder().decode(buf);
     const readFile   = file => new Promise((res, rej) => { const r = new FileReader(); r.onload = e => res(e.target.result); r.onerror = rej; r.readAsArrayBuffer(file); });
 
+    // ── Populate characteristic / difficulty selects from a pairs array ──
+    function populateSelects(charSel, diffSel, pairs) {
+      const prevChar = charSel.value;
+      const prevDiff = diffSel.value;
+
+      const chars = [...new Set(pairs.map(p => p.characteristic))];
+      charSel.innerHTML = chars.map(c => `<option value="${c}">${CHAR_LABEL[c] ?? c}</option>`).join('');
+      if (chars.includes(prevChar)) charSel.value = prevChar;
+      charSel.disabled = false;
+
+      function syncDiffs() {
+        const char  = charSel.value;
+        const diffs = pairs
+          .filter(p => p.characteristic === char)
+          .sort((a, b) => (RANK[b.difficulty] ?? 0) - (RANK[a.difficulty] ?? 0))
+          .map(p => p.difficulty);
+        diffSel.innerHTML = diffs.map(d => `<option value="${d}">${DIFF_LABEL[d] ?? d}</option>`).join('');
+        if (diffs.includes(prevDiff)) diffSel.value = prevDiff;
+        diffSel.disabled = false;
+      }
+
+      charSel.onchange = syncDiffs;
+      syncDiffs();
+    }
+
+    function pairsFromInfoDat(infoDat) {
+      const pairs = [];
+      for (const set of infoDat._difficultyBeatmapSets ?? []) {
+        const char = set._beatmapCharacteristicName;
+        for (const bm of set._difficultyBeatmaps ?? []) pairs.push({ characteristic: char, difficulty: bm._difficulty });
+      }
+      for (const bm of infoDat.difficultyBeatmaps ?? [])
+        pairs.push({ characteristic: bm.characteristic ?? 'Standard', difficulty: bm.difficulty });
+      return pairs;
+    }
+
+    // ── BeatSaver API cache + debounced key lookup ──
+    const bsCache = {};
+    let keyTimer  = null;
+
+    async function fetchBSInfo(key) {
+      if (!bsCache[key]) {
+        const r = await fetch(`https://beatsaver.com/api/maps/id/${key}`);
+        if (!r.ok) throw new Error(`map "${key}" not found`);
+        bsCache[key] = await r.json();
+      }
+      return bsCache[key];
+    }
+
+    $('mapKey').addEventListener('input', () => {
+      clearTimeout(keyTimer);
+      const key = $('mapKey').value.trim().toLowerCase();
+      if (!key) return;
+      keyTimer = setTimeout(async () => {
+        try {
+          const info  = await fetchBSInfo(key);
+          const pairs = info.versions.at(-1).diffs.map(d => ({ characteristic: d.characteristic, difficulty: d.difficulty }));
+          populateSelects($('key-characteristic'), $('key-difficulty'), pairs);
+        } catch { /* leave selects as-is */ }
+      }, 400);
+    });
+
     // ── Tabs ──
     let activeTab = 'key';
     document.querySelectorAll('.tab').forEach(btn => {
@@ -445,6 +493,22 @@
     // ── File inputs ──
     // input.files is read-only, so we track dropped files separately
     const droppedFiles = {};
+    let zipBuf = null;
+
+    async function onZipFile(file) {
+      droppedFiles['zip-file'] = file;
+      showName('zip-name', file.name, $('zip-drop'));
+      try {
+        zipBuf = await readFile(file);
+        const files   = unzipSync(new Uint8Array(zipBuf));
+        const getF    = name => { const k = Object.keys(files).find(k => k.toLowerCase() === name.toLowerCase()); return k ? files[k] : null; };
+        const infoRaw = getF('Info.dat') ?? getF('info.dat');
+        if (infoRaw) {
+          const pairs = pairsFromInfoDat(JSON.parse(decode(infoRaw)));
+          if (pairs.length) populateSelects($('zip-characteristic'), $('zip-difficulty'), pairs);
+        }
+      } catch { /* ignore parse errors */ }
+    }
 
     function setupDrop(dropId, inputId, nameId) {
       const drop  = $(dropId);
@@ -455,10 +519,12 @@
         e.preventDefault();
         drop.classList.remove('drag');
         const f = e.dataTransfer.files[0];
-        if (f) { droppedFiles[inputId] = f; showName(nameId, f.name, drop); }
+        if (!f) return;
+        if (inputId === 'zip-file') { onZipFile(f); } else { droppedFiles[inputId] = f; showName(nameId, f.name, drop); }
       });
       input.addEventListener('change', () => {
-        if (input.files[0]) { droppedFiles[inputId] = null; showName(nameId, input.files[0].name, drop); }
+        if (!input.files[0]) return;
+        if (inputId === 'zip-file') { onZipFile(input.files[0]); } else { droppedFiles[inputId] = null; showName(nameId, input.files[0].name, drop); }
       });
     }
 
@@ -501,23 +567,28 @@
 
     async function classifyFromKey(clf) {
       const key  = $('mapKey').value.trim().toLowerCase();
-      const char = $('key-characteristic').value;
-      const diff = $('key-difficulty').value;
       if (!key) throw new Error('enter a map key first');
 
       setLoading(true, 'FETCHING MAP');
-      const info = await fetch(`https://beatsaver.com/api/maps/id/${key}`)
-        .then(r => { if (!r.ok) throw new Error(`map "${key}" not found`); return r.json(); });
-
+      const info    = await fetchBSInfo(key);
       const version = info.versions.at(-1);
-      const chosen  = version.diffs.find(d => d.characteristic === char && d.difficulty === diff)
-                   ?? [...version.diffs].sort((a, b) => (RANK[b.difficulty] ?? 0) - (RANK[a.difficulty] ?? 0))[0];
+
+      // Populate selects if not yet done (user clicked without waiting for debounce)
+      if ($('key-characteristic').disabled) {
+        const pairs = version.diffs.map(d => ({ characteristic: d.characteristic, difficulty: d.difficulty }));
+        populateSelects($('key-characteristic'), $('key-difficulty'), pairs);
+      }
+
+      const char = $('key-characteristic').value;
+      const diff = $('key-difficulty').value;
+      const chosen = version.diffs.find(d => d.characteristic === char && d.difficulty === diff)
+                  ?? [...version.diffs].sort((a, b) => (RANK[b.difficulty] ?? 0) - (RANK[a.difficulty] ?? 0))[0];
 
       setLoading(true, 'DOWNLOADING ZIP');
-      const zipBuf = await fetch(`https://cdn.beatsaver.com/${version.hash}.zip`).then(r => r.arrayBuffer());
+      const buf = await fetch(`https://cdn.beatsaver.com/${version.hash}.zip`).then(r => r.arrayBuffer());
 
       setLoading(true, 'CLASSIFYING');
-      const { datJson, infoDat } = extractDat(zipBuf, chosen.characteristic, chosen.difficulty);
+      const { datJson } = extractDat(buf, chosen.characteristic, chosen.difficulty);
       const beatmap = parseBeatmap(datJson);
       const result  = await parseMap(beatmap, info.metadata.bpm, clf);
 
@@ -529,12 +600,14 @@
 
     async function classifyFromZip(clf) {
       const file = getFile('zip-file');
+      if (!file) throw new Error('select a zip file first');
+      if ($('zip-characteristic').disabled) throw new Error('waiting for zip to parse — try again');
+
       const char = $('zip-characteristic').value;
       const diff = $('zip-difficulty').value;
-      if (!file) throw new Error('select a zip file first');
 
       setLoading(true, 'READING ZIP');
-      const buf  = await readFile(file);
+      const buf  = zipBuf ?? await readFile(file);
       const { datJson, infoDat, bpm } = extractDat(buf, char, diff);
 
       setLoading(true, 'CLASSIFYING');
