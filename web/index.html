@@ -402,7 +402,7 @@
     ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/';
     ort.env.wasm.numThreads = 1;
 
-    import { setOrtInstance, parseBeatmap, findDatFilename, parseMap } from 'https://esm.sh/bs-map-classifier';
+    import { setOrtInstance, parseBeatmap, findDatFilename, extractPatternsAndClassifyMap } from 'https://esm.sh/bs-map-classifier';
     import { unzipSync } from 'https://esm.sh/fflate';
 
     setOrtInstance(ort);
@@ -606,7 +606,7 @@
       setLoading(true, 'CLASSIFYING');
       const { datJson } = extractDat(buf, chosen.characteristic, chosen.difficulty);
       const beatmap = parseBeatmap(datJson);
-      const result  = await parseMap(beatmap, info.metadata.bpm, clf);
+      const result  = await extractPatternsAndClassifyMap(beatmap, info.metadata.bpm, clf);
 
       setLoading(false);
       const meta = `<strong>${info.metadata.songName}</strong> — ${info.metadata.songAuthorName}<br>` +
@@ -628,7 +628,7 @@
 
       setLoading(true, 'CLASSIFYING');
       const beatmap = parseBeatmap(datJson);
-      const result  = await parseMap(beatmap, bpm ?? 120, clf);
+      const result  = await extractPatternsAndClassifyMap(beatmap, bpm ?? 120, clf);
 
       setLoading(false);
       const songName = infoDat?._songName ?? file.name.replace('.zip', '');
@@ -648,7 +648,7 @@
 
       setLoading(true, 'CLASSIFYING');
       const beatmap = parseBeatmap(datJson);
-      const result  = await parseMap(beatmap, bpm, clf);
+      const result  = await extractPatternsAndClassifyMap(beatmap, bpm, clf);
 
       setLoading(false);
       renderResults(`<strong>${file.name}</strong> · ${bpm} BPM`, result);

@@ -33,13 +33,13 @@ npm install bs-map-classifier onnxruntime-web
 
 ```js
 import { loadEmbeddedClassifier } from 'bs-map-classifier/embedded';
-import { parseBeatmap, findDatFilename, parseMap } from 'bs-map-classifier';
+import { parseBeatmap, findDatFilename, extractPatternsAndClassifyMap } from 'bs-map-classifier';
 import { readFile } from 'node:fs/promises';
 
 const clf     = await loadEmbeddedClassifier();
 const infoDat = JSON.parse(await readFile('Info.dat', 'utf8'));
 const datJson = JSON.parse(await readFile(findDatFilename(infoDat, 'Standard', 'ExpertPlus'), 'utf8'));
-const result  = await parseMap(parseBeatmap(datJson), /* bpm */ 180, clf);
+const result  = await extractPatternsAndClassifyMap(parseBeatmap(datJson), /* bpm */ 180, clf);
 
 console.log(result.classification.category);    // 'Tech'
 console.log(result.classification.confidence);  // 0.87
