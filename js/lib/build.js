@@ -46,16 +46,11 @@ await writeFile(
 
 await esbuild.build({
   // CJS output is always consumed by Node.js, so compile from the node variants.
-  // This gives the CJS build a static onnxruntime-node import instead of the
-  // dynamic try/catch detection used by the default (universal) classify.js.
-  //
-  // Output names must match the relative imports used by the compiled files:
-  //   index.node.js  → index.js          (entry point)
-  //   classify.node.js → classify.node.js (imported as './classify.node.js' by index.js)
-  //   infer.js, map.js: new shared modules required by classify.node.js / index.js
+  // classify.node.js is intentionally excluded — it is generated as a hand-crafted
+  // template below to guarantee require('onnxruntime-node') is used without esbuild's
+  // __toESM() proxy wrapper, which breaks the backend registry in pnpm projects.
   entryPoints: [
-    { in: 'src/index.node.js',   out: 'index' },
-    { in: 'src/classify.node.js', out: 'classify.node' },
+    { in: 'src/index.node.js', out: 'index' },
     'src/infer.js',
     'src/map.js',
     'src/parser.js',
@@ -68,6 +63,49 @@ await esbuild.build({
   outdir: 'dist/cjs/',
   logLevel: 'info',
 });
+
+// Hand-crafted CJS entry for onnxruntime-node.
+// esbuild wraps `import * as x from 'onnxruntime-node'` with __toESM(), which creates
+// a proxy object that breaks onnxruntime-node's backend registry in pnpm projects
+// (the registered backend lives in one onnxruntime-common instance; the proxy looks
+// up a different one).  Using require() directly avoids the proxy entirely.
+await writeFile(join(__dirname, 'dist/cjs/classify.node.js'), `"use strict";
+const { preprocess, classifyFromNotes } = require("./infer.js");
+
+let _ort = require("onnxruntime-node");
+
+function setOrtInstance(o) { _ort = o; }
+async function setWasmPaths(wasmDir) { _ort.env.wasm.wasmPaths = wasmDir; }
+
+async function loadClassifier(modelPath, metaPath) {
+  const { readFile } = await import("node:fs/promises");
+  const [modelBuf, metaText] = await Promise.all([readFile(modelPath), readFile(metaPath, "utf8")]);
+  const session = await _ort.InferenceSession.create(modelBuf, { executionProviders: ["wasm"] });
+  return { session, meta: JSON.parse(metaText), ort: _ort };
+}
+
+async function loadClassifierFromFetch(modelUrl, metaUrl) {
+  const [modelResp, metaResp] = await Promise.all([fetch(modelUrl), fetch(metaUrl)]);
+  if (!modelResp.ok) throw new Error("Failed to fetch model: " + modelResp.status);
+  if (!metaResp.ok)  throw new Error("Failed to fetch meta: " + metaResp.status);
+  const [modelBuf, meta] = await Promise.all([modelResp.arrayBuffer(), metaResp.json()]);
+  const session = await _ort.InferenceSession.create(new Uint8Array(modelBuf), { executionProviders: ["wasm"] });
+  return { session, meta, ort: _ort };
+}
+
+async function loadClassifierFromBuffers(modelBuffer, meta) {
+  const session = await _ort.InferenceSession.create(new Uint8Array(modelBuffer), { executionProviders: ["wasm"] });
+  return { session, meta, ort: _ort };
+}
+
+exports.setOrtInstance          = setOrtInstance;
+exports.setWasmPaths            = setWasmPaths;
+exports.loadClassifier          = loadClassifier;
+exports.loadClassifierFromFetch = loadClassifierFromFetch;
+exports.loadClassifierFromBuffers = loadClassifierFromBuffers;
+exports.preprocess              = preprocess;
+exports.classifyFromNotes       = classifyFromNotes;
+`);
 
 // ── 2. Embedded model files ────────────────────────────────────────────────────
 
