@@ -2,7 +2,7 @@
 
 ## Dataset
 
-529 maps from `dataset_wc_pooling.csv`, 5 active categories (`Balanced` excluded):
+529 maps from the BSWC pooling database, 5 active categories (`Balanced` excluded):
 
 | Category | Count | % |
 |----------|-------|---|
