@@ -10,7 +10,7 @@
  */
 
 import esbuild from 'esbuild';
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { copyFile, readFile, writeFile, mkdir } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -29,6 +29,19 @@ await mkdir(join(__dirname, 'dist/cjs'), { recursive: true });
 await writeFile(
   join(__dirname, 'dist/cjs/package.json'),
   JSON.stringify({ type: 'commonjs' }) + '\n',
+);
+
+// Copy the shared declaration file so TypeScript treats it as CJS
+// (because dist/cjs/package.json has "type": "commonjs").
+await copyFile(
+  join(__dirname, 'types/index.d.ts'),
+  join(__dirname, 'dist/cjs/index.d.ts'),
+);
+
+// Minimal declaration file for the ./embedded subpath in CJS mode.
+await writeFile(
+  join(__dirname, 'dist/cjs/embedded.d.ts'),
+  `export { loadEmbeddedClassifier } from './index';\n`,
 );
 
 await esbuild.build({
