@@ -80,7 +80,7 @@ async function setWasmPaths(wasmDir) { _ort.env.wasm.wasmPaths = wasmDir; }
 async function loadClassifier(modelPath, metaPath) {
   const { readFile } = await import("node:fs/promises");
   const [modelBuf, metaText] = await Promise.all([readFile(modelPath), readFile(metaPath, "utf8")]);
-  const session = await _ort.InferenceSession.create(modelBuf, { executionProviders: ["wasm"] });
+  const session = await _ort.InferenceSession.create(modelBuf, { executionProviders: ["cpu"] });
   return { session, meta: JSON.parse(metaText), ort: _ort };
 }
 
@@ -89,12 +89,12 @@ async function loadClassifierFromFetch(modelUrl, metaUrl) {
   if (!modelResp.ok) throw new Error("Failed to fetch model: " + modelResp.status);
   if (!metaResp.ok)  throw new Error("Failed to fetch meta: " + metaResp.status);
   const [modelBuf, meta] = await Promise.all([modelResp.arrayBuffer(), metaResp.json()]);
-  const session = await _ort.InferenceSession.create(new Uint8Array(modelBuf), { executionProviders: ["wasm"] });
+  const session = await _ort.InferenceSession.create(new Uint8Array(modelBuf), { executionProviders: ["cpu"] });
   return { session, meta, ort: _ort };
 }
 
 async function loadClassifierFromBuffers(modelBuffer, meta) {
-  const session = await _ort.InferenceSession.create(new Uint8Array(modelBuffer), { executionProviders: ["wasm"] });
+  const session = await _ort.InferenceSession.create(new Uint8Array(modelBuffer), { executionProviders: ["cpu"] });
   return { session, meta, ort: _ort };
 }
 
