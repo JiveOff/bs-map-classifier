@@ -43,15 +43,15 @@ const ortPkgDir  = findPkgRoot(_require.resolve('onnxruntime-web'));
 const ortVersion = JSON.parse(await readFile(join(ortPkgDir, 'package.json'), 'utf8')).version;
 const ORT_DIST   = join(ortPkgDir, 'dist');
 
-// ONNX model files live in the sibling js/ workspace package
-const MODEL_DIR = join(ROOT, 'lib', 'models');
+// ONNX model files — canonical output of export_onnx.py at the repo root
+const MODEL_DIR = join(ROOT, '..', 'models', 'onnx');
 
 // CDN URL base for the userscript (WASM served from jsDelivr)
 const ORT_CDN = `https://cdn.jsdelivr.net/npm/onnxruntime-web@${ortVersion}/dist/`;
 
 // Hosted model base for the userscript (update to wherever you host the files)
 const MODEL_BASE_URL = process.env.MODEL_BASE_URL
-  ?? 'https://raw.githubusercontent.com/JiveOff/bs-map-classifier/main/js/lib/models/';
+  ?? 'https://raw.githubusercontent.com/JiveOff/bs-map-classifier/main/models/onnx/';
 
 // Read injected.js source for inlining into the userscript build
 const injectedSrc = await readFile(join(__dirname, 'public', 'injected.js'), 'utf8');

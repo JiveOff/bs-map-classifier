@@ -427,13 +427,14 @@ def count_patterns(notes: List[Note], bpm: float,
         return count
     counts['n_triangles'] = _count_triangles(left_n) + _count_triangles(right_n)
 
-    # --- Jumps (MED): consecutive same-hand notes with spatial distance ≥ 2 ---
+    # --- Jumps (MED): consecutive same-hand notes with spatial distance ≥ 2, within 2 beats ---
     # docs/patterns/jump/
     def _count_jumps(hand_notes: List[Note]) -> int:
         return sum(
             1 for i in range(1, len(hand_notes))
-            if math.sqrt((hand_notes[i].x - hand_notes[i-1].x)**2 +
-                         (hand_notes[i].y - hand_notes[i-1].y)**2) >= 2
+            if (hand_notes[i].beat - hand_notes[i-1].beat) <= 2
+            and math.sqrt((hand_notes[i].x - hand_notes[i-1].x)**2 +
+                          (hand_notes[i].y - hand_notes[i-1].y)**2) >= 2
         )
     counts['n_jumps'] = _count_jumps(left_n) + _count_jumps(right_n)
 

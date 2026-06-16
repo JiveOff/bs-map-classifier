@@ -3,5 +3,8 @@ dist/
 # but keep the pre-built library dist (embedded model + CJS bundle)
 !lib/dist/
 
+# Model copies — canonical source is models/onnx/ at the repo root
+lib/models/
+
 # Dependencies
 node_modules/
