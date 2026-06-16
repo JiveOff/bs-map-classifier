@@ -17,6 +17,14 @@ notebooks/*.pdf
 .DS_Store
 **/.DS_Store
 
+# Source dataset (private — contains map identifiers)
+dataset_wc_pooling.csv
+
+# Processed features containing map keys/names/hashes
+data/processed/features.csv
+data/processed/features_merged.csv
+data/processed/pattern_features.csv
+
 # Raw map downloads (5+ GB, re-downloadable via downloader.py)
 data/raw/
 
