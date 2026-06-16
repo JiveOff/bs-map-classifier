@@ -1,0 +1,44 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+/dist/
+build/
+.eggs/
+
+# Jupyter
+.ipynb_checkpoints/
+notebooks/*.pdf
+
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Raw map downloads (5+ GB, re-downloadable via downloader.py)
+data/raw/
+
+# Trained model binaries (regenerate with src/models/baseline.py + tune.py + export_onnx.py)
+models/baseline_models/*.pkl
+models/*.pkl
+models/tuned/*.pkl
+
+# Environment
+.env
+*.env
+
+# IDE
+.idea/
+.vscode/
+
+# Wiki submodule build artifacts
+wiki/
+
+# WIP viewer
+viewer/
+
+# Node.js (also covered by js/.gitignore for the JS workspace)
+node_modules
+**/node_modules

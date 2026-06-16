@@ -1,0 +1,99 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]*'
+
+permissions:
+  contents: write   # required to create GitHub Releases
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history lets softprops generate accurate release notes
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      # ── Extract semver from tag (v1.2.3 → 1.2.3) ─────────────────────────
+      - name: Extract version
+        id: ver
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      # ── Patch version into every manifest that carries it ─────────────────
+      - name: Patch versions
+        env:
+          V: ${{ steps.ver.outputs.VERSION }}
+        run: |
+          patch() {
+            node -e "
+              const fs = require('fs');
+              const p  = JSON.parse(fs.readFileSync('$1', 'utf8'));
+              p.version = process.env.V;
+              fs.writeFileSync('$1', JSON.stringify(p, null, 2) + '\n');
+            "
+          }
+          patch js/lib/package.json
+          patch js/extension/package.json
+          patch js/extension/public/manifest.json
+
+      # ── Install workspace deps ─────────────────────────────────────────────
+      - name: Install dependencies
+        working-directory: js
+        run: pnpm install --ignore-scripts
+
+      # ── Build library: ESM source is ready; compile CJS ───────────────────
+      - name: Build library (CJS)
+        working-directory: js
+        run: pnpm --filter bs-map-classifier run build
+
+      # ── Build extension + self-contained userscript ────────────────────────
+      - name: Build extension & userscript
+        working-directory: js
+        env:
+          RELEASE_VERSION: ${{ steps.ver.outputs.VERSION }}
+        run: pnpm --filter bs-pattern-overlay run build
+
+      # ── Package artifacts ──────────────────────────────────────────────────
+      - name: Package extension zip
+        working-directory: js/dist/extension
+        run: zip -r ../../bs-pattern-overlay-v${{ steps.ver.outputs.VERSION }}.zip .
+
+      - name: Package library zip
+        working-directory: js/lib
+        run: |
+          zip -r ../bs-map-classifier-v${{ steps.ver.outputs.VERSION }}.zip \
+            src/ dist/ models/ types/ package.json README.md
+
+      - name: Stage versioned userscript copy
+        working-directory: js
+        run: cp dist/bs-pattern-overlay.user.js bs-pattern-overlay-v${{ steps.ver.outputs.VERSION }}.user.js
+
+      # ── GitHub Release with all four assets ───────────────────────────────
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            js/dist/bs-pattern-overlay.user.js
+            js/bs-pattern-overlay-v${{ steps.ver.outputs.VERSION }}.user.js
+            js/bs-pattern-overlay-v${{ steps.ver.outputs.VERSION }}.zip
+            js/bs-map-classifier-v${{ steps.ver.outputs.VERSION }}.zip
+
+      # ── Publish library to npm ─────────────────────────────────────────────
+      - name: Publish to npm
+        working-directory: js/lib
+        run: pnpm publish --access public --no-git-checks
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

@@ -1,0 +1,7 @@
+# Build outputs
+dist/
+# but keep the pre-built library dist (embedded model + CJS bundle)
+!lib/dist/
+
+# Dependencies
+node_modules/

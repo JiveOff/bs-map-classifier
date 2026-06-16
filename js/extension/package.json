@@ -1,0 +1,19 @@
+{
+  "name": "bs-pattern-overlay",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.js",
+    "build:ext": "node build.js --target=extension",
+    "build:userscript": "node build.js --target=userscript"
+  },
+  "dependencies": {
+    "bs-map-classifier": "workspace:*"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.1",
+    "fflate": "^0.8.2",
+    "onnxruntime-web": "^1.22.0"
+  }
+}

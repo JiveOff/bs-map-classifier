@@ -1,0 +1,155 @@
+# bs-map-classifier
+
+Classify Beat Saber custom maps into **Tech · Speed · Accuracy · Standard · Extreme** using an ONNX gradient-boosting model trained on 200+ note-level pattern features.
+
+Works in **Node.js** (file-based loading) and **browser** (fetch-based loading, via `onnxruntime-web`).
+
+## Install
+
+```bash
+npm install bs-map-classifier
+
+# One ONNX runtime is required — pick the one that matches your environment:
+npm install onnxruntime-node   # Node.js
+npm install onnxruntime-web    # browser / bundler
+```
+
+## Quick start — embedded model
+
+The `/embedded` subpath bundles the ONNX model at build time — no file paths, no network requests:
+
+```js
+import { loadEmbeddedClassifier } from 'bs-map-classifier/embedded';
+import { parseBeatmap, findDatFilename, parseMap } from 'bs-map-classifier';
+import { readFile } from 'node:fs/promises';
+
+// Model is already baked into the package — call once and cache
+const clf = await loadEmbeddedClassifier();
+
+// Parse a beatmap .dat file
+const infoDat = JSON.parse(await readFile('Info.dat', 'utf8'));
+const datFile = findDatFilename(infoDat, 'Standard', 'ExpertPlus');
+const datJson = JSON.parse(await readFile(datFile, 'utf8'));
+
+// High-level: features + pattern annotation + classification in one call
+const result = await parseMap(parseBeatmap(datJson), /* bpm */ 180, clf);
+
+console.log(result.classification.category);    // e.g. "Tech"
+console.log(result.classification.confidence);  // e.g. 0.87
+console.log(result.classification.probabilities);
+// { Accuracy: 0.02, Extreme: 0.04, Speed: 0.05, Standard: 0.02, Tech: 0.87 }
+
+console.log(`${result.patterns.length} pattern events detected`);
+// result.patterns: [{ type, label, beat, time, notes }, ...]
+// result.features: { lane_0_rate, ebpm_left_mean, n_crossovers, ... }
+```
+
+## CommonJS
+
+```js
+const { loadEmbeddedClassifier } = require('bs-map-classifier/embedded');
+const { parseBeatmap }            = require('bs-map-classifier');
+```
+
+## Custom model path (advanced)
+
+If you want to provide your own model or load it differently:
+
+```js
+import { loadClassifier, parseBeatmap, parseMap } from 'bs-map-classifier';
+
+const clf = await loadClassifier(
+  '/path/to/pattern_classifier.onnx',
+  '/path/to/pattern_classifier_meta.json',
+);
+```
+
+## Browser (fetch-based)
+
+```js
+import {
+  loadClassifierFromFetch, parseBeatmap, findDatFilename, parseMap,
+  setOrtInstance, setWasmPaths,
+} from 'bs-map-classifier';
+import * as ort from 'onnxruntime-web/wasm';
+
+// Configure ORT before creating any session
+ort.env.wasm.numThreads = 1;
+setOrtInstance(ort);
+setWasmPaths('/wasm/');  // directory containing ort-wasm-simd-threaded.wasm
+
+const clf = await loadClassifierFromFetch(
+  '/models/pattern_classifier.onnx',
+  '/models/pattern_classifier_meta.json',
+);
+
+const beatmap = parseBeatmap(datJson);
+const result  = await parseMap(beatmap, bpm, clf);
+```
+
+## API
+
+### Loading
+
+| Function | Environment | Description |
+|---|---|---|
+| `loadClassifier(modelPath, metaPath)` | Node.js | Load from filesystem paths |
+| `loadClassifierFromFetch(modelUrl, metaUrl)` | Browser / Deno / Node ≥18 | Load via `fetch()` |
+| `loadClassifierFromBuffers(modelBuffer, meta)` | Anywhere | Load from pre-fetched `ArrayBuffer` + parsed JSON |
+
+### Parsing
+
+| Function | Description |
+|---|---|
+| `parseBeatmap(datJson)` | Parse a `.dat` file (v2, v3, v4 format auto-detected) → `{ notes, obstacles, arcs, chains, bombs }` |
+| `findDatFilename(infoDat, characteristic, difficulty)` | Look up the correct `.dat` filename from `Info.dat` |
+
+### High-level
+
+```ts
+parseMap(parsedBeatmap, bpm, classifier?) → Promise<{
+  features:       Record<string, number>,   // 202 statistical features
+  patterns:       PatternEvent[],           // annotated pattern timeline
+  patternColors:  Record<string, string>,   // hex colours per pattern type
+  allNotes:       Note[],
+  classification?: { category, confidence, probabilities },
+}>
+```
+
+### Low-level
+
+```ts
+classifyFromNotes(notes, obstacles, arcs, chains, bpm, bombs, classifier)
+  → Promise<{ category, confidence, probabilities }>
+
+computeFeatures(notes, obstacles, arcs, chains, bpm, bombs)
+  → Record<string, number>
+
+annotatePatterns(notes, bpm, meta?)
+  → { patterns, colors, all_notes, meta }
+```
+
+### Browser helpers
+
+```ts
+setOrtInstance(ort)          // inject pre-loaded ORT runtime
+setWasmPaths(wasmDirUrl)     // set WASM directory before first session
+```
+
+## Categories
+
+| Category | Typical characteristics |
+|---|---|
+| **Tech** | Crossovers, doubles, triangles, high parity-break rate |
+| **Speed** | Dense streams, high eBPM, dot-heavy |
+| **Accuracy** | Arc-heavy, low parity breaks, structured patterns |
+| **Standard** | Balanced mix, moderate density |
+| **Extreme** | Very high density, towers, quads, walls |
+
+## Pattern types
+
+`annotatePatterns` returns events of these types: `double`, `scissor`, `crossover`, `crossover_scissor`, `stack`, `tower`, `stream`, `dd` (double-directional), `jump`, `invert`.
+
+## License
+
+MIT

@@ -1,0 +1,41 @@
+{
+  "manifest_version": 3,
+  "name": "BS Pattern Overlay",
+  "version": "0.3.0",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "bspatternoverlay@local",
+      "strict_min_version": "109.0"
+    }
+  },
+  "description": "Auto-detects Beat Saber maps in ArcViewer, overlays pattern detection, and classifies maps into Tech / Speed / Accuracy / Standard / Extreme using an ONNX model.",
+  "permissions": [],
+  "host_permissions": [
+    "https://allpoland.github.io/*",
+    "https://beatsaver.com/*",
+    "https://*.beatsaver.com/*",
+    "https://watch.scoresaber.com/*"
+  ],
+  "content_scripts": [{
+    "matches": ["https://allpoland.github.io/ArcViewer/*", "https://watch.scoresaber.com/*"],
+    "js": ["content.js"],
+    "run_at": "document_start"
+  }],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "BS Pattern Overlay"
+  },
+  "web_accessible_resources": [{
+    "resources": [
+      "injected.js",
+      "pattern_classifier.onnx",
+      "pattern_classifier_meta.json",
+      "wasm/*.wasm",
+      "wasm/*.mjs"
+    ],
+    "matches": [
+      "https://allpoland.github.io/*",
+      "https://watch.scoresaber.com/*"
+    ]
+  }]
+}

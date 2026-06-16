@@ -1,0 +1,77 @@
+{
+  "name": "bs-map-classifier",
+  "version": "0.1.0",
+  "description": "Classify Beat Saber maps into Tech / Speed / Accuracy / Standard / Extreme using an ONNX model trained on note-level pattern features. Works in Node.js and browser.",
+  "type": "module",
+  "scripts": {
+    "build": "node build.js",
+    "verify": "node verify_parity.js"
+  },
+  "main": "dist/cjs/index.js",
+  "module": "src/index.js",
+  "types": "types/index.d.ts",
+  "exports": {
+    ".": {
+      "types":   "./types/index.d.ts",
+      "import":  "./src/index.js",
+      "require": "./dist/cjs/index.js"
+    },
+    "./parser": {
+      "types":   "./types/index.d.ts",
+      "import":  "./src/parser.js",
+      "require": "./dist/cjs/parser.js"
+    },
+    "./features": {
+      "types":   "./types/index.d.ts",
+      "import":  "./src/features.js",
+      "require": "./dist/cjs/features.js"
+    },
+    "./classify": {
+      "types":   "./types/index.d.ts",
+      "import":  "./src/classify.js",
+      "require": "./dist/cjs/classify.js"
+    },
+    "./embedded": {
+      "types":   "./types/index.d.ts",
+      "import":  "./dist/embedded.mjs",
+      "require": "./dist/cjs/embedded.js"
+    }
+  },
+  "browser": {
+    "node:fs/promises": false
+  },
+  "files": [
+    "src/",
+    "models/",
+    "types/",
+    "dist/",
+    "README.md"
+  ],
+  "keywords": [
+    "beat-saber",
+    "ml",
+    "classifier",
+    "onnx",
+    "rhythm-game",
+    "pattern-detection"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "peerDependencies": {
+    "onnxruntime-node": ">=1.17.0",
+    "onnxruntime-web": ">=1.17.0"
+  },
+  "peerDependenciesMeta": {
+    "onnxruntime-node": {
+      "optional": true
+    },
+    "onnxruntime-web": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.1"
+  }
+}

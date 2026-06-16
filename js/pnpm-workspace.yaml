@@ -1,0 +1,8 @@
+packages:
+  - 'lib'
+  - 'extension'
+
+onlyBuiltDependencies:
+  - esbuild
+  - onnxruntime-node
+  - protobufjs

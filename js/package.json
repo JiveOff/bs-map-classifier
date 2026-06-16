@@ -1,0 +1,13 @@
+{
+  "name": "ml-training-classifier",
+  "private": true,
+  "scripts": {
+    "build": "pnpm -r run build",
+    "build:ext": "pnpm --filter bs-pattern-overlay run build:ext",
+    "build:userscript": "pnpm --filter bs-pattern-overlay run build:userscript"
+  },
+  "engines": {
+    "pnpm": ">=9.0.0",
+    "node": ">=18.0.0"
+  }
+}
