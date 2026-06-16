@@ -40,7 +40,7 @@ console.log(result.classification.category);    // 'Tech'
 console.log(result.classification.confidence);  // 0.87
 ```
 
-Try it instantly in your browser: **[Open in StackBlitz](https://stackblitz.com/edit/node-kehuegda?file=index.js)**
+Try it instantly in your browser: **[Open in StackBlitz](https://stackblitz.com/edit/node-kehuegda?file=index.js)** · **[Web demo](https://jiveoff.github.io/bs-map-classifier/)**
 
 See [`js/lib/README.md`](js/lib/README.md) for the full API and [`js/lib/examples/`](js/lib/examples/) for a complete BeatSaver fetch example.
 

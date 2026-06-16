@@ -405,7 +405,7 @@
   </footer>
 
   <script type="module">
-    import * as ort from 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/esm/ort.min.js';
+    import * as ort from 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/ort.min.mjs';
     ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/';
     ort.env.wasm.numThreads = 1;
 
@@ -443,6 +443,9 @@
     });
 
     // ── File inputs ──
+    // input.files is read-only, so we track dropped files separately
+    const droppedFiles = {};
+
     function setupDrop(dropId, inputId, nameId) {
       const drop  = $(dropId);
       const input = $(inputId);
@@ -452,11 +455,15 @@
         e.preventDefault();
         drop.classList.remove('drag');
         const f = e.dataTransfer.files[0];
-        if (f) { input.files = e.dataTransfer.files; showName(nameId, f.name, drop); }
+        if (f) { droppedFiles[inputId] = f; showName(nameId, f.name, drop); }
       });
       input.addEventListener('change', () => {
-        if (input.files[0]) showName(nameId, input.files[0].name, drop);
+        if (input.files[0]) { droppedFiles[inputId] = null; showName(nameId, input.files[0].name, drop); }
       });
+    }
+
+    function getFile(inputId) {
+      return droppedFiles[inputId] ?? $(inputId).files[0] ?? null;
     }
 
     function showName(nameId, name, drop) {
@@ -521,7 +528,7 @@
     }
 
     async function classifyFromZip(clf) {
-      const file = $('zip-file').files[0];
+      const file = getFile('zip-file');
       const char = $('zip-characteristic').value;
       const diff = $('zip-difficulty').value;
       if (!file) throw new Error('select a zip file first');
@@ -541,7 +548,7 @@
     }
 
     async function classifyFromDat(clf) {
-      const file = $('dat-file').files[0];
+      const file = getFile('dat-file');
       const bpm  = parseFloat($('dat-bpm').value);
       if (!file) throw new Error('select a .dat file first');
       if (!bpm || bpm <= 0) throw new Error('enter the map BPM');
@@ -559,7 +566,7 @@
     }
 
     function extractDat(buf, char, diff) {
-      const files   = unzipSync(new Uint8Array(buf instanceof ArrayBuffer ? buf : buf));
+      const files   = unzipSync(new Uint8Array(buf));
       const getFile = name => { const k = Object.keys(files).find(k => k.toLowerCase() === name.toLowerCase()); return k ? files[k] : null; };
 
       const infoRaw = getFile('Info.dat') ?? getFile('info.dat');
