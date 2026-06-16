@@ -6,6 +6,7 @@ on:
       - 'v[0-9]*'
 
 permissions:
+  id-token: write
   contents: write   # required to create GitHub Releases
 
 jobs:
@@ -95,5 +96,3 @@ jobs:
       - name: Publish to npm
         working-directory: js/lib
         run: pnpm publish --access public --no-git-checks
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
