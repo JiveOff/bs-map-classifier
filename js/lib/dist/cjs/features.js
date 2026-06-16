@@ -142,9 +142,10 @@ function countTriangles(hand) {
   }
   return c;
 }
-function countJumps(hand) {
+function countJumps(hand, maxBeats = 2) {
   let c = 0;
   for (let i = 1; i < hand.length; i++) {
+    if (hand[i].beat - hand[i - 1].beat > maxBeats) continue;
     const dx = hand[i].x - hand[i - 1].x, dy = hand[i].y - hand[i - 1].y;
     if (Math.sqrt(dx * dx + dy * dy) >= 2) c++;
   }

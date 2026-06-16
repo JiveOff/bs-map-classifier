@@ -10,28 +10,15 @@
  */
 
 import esbuild from 'esbuild';
-import { copyFile, readFile, writeFile, mkdir } from 'node:fs/promises';
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// ── 0. Sync models from the repo-root training output ─────────────────────────
 // Source of truth: <repo-root>/models/onnx/ (written by src/models/export_onnx.py)
-// Destination:     js/lib/models/            (committed as a fallback, kept fresh here)
-
-const REPO_ROOT   = resolve(__dirname, '../..');
-const MODELS_SRC  = join(REPO_ROOT, 'models', 'onnx');
-const MODELS_DEST = join(__dirname, 'models');
-
-for (const file of ['pattern_classifier.onnx', 'pattern_classifier_meta.json']) {
-  try {
-    await copyFile(join(MODELS_SRC, file), join(MODELS_DEST, file));
-    console.log(`  Synced ${file} from models/onnx/`);
-  } catch {
-    console.log(`  ${file}: using existing copy (models/onnx/ not found or not readable)`);
-  }
-}
+const REPO_ROOT  = resolve(__dirname, '../..');
+const MODELS_SRC = join(REPO_ROOT, 'models', 'onnx');
 
 // ── 1. CJS output ──────────────────────────────────────────────────────────────
 
@@ -58,9 +45,9 @@ await esbuild.build({
 
 // ── 2. Embedded model files ────────────────────────────────────────────────────
 
-const modelBytes = await readFile(join(__dirname, 'models/pattern_classifier.onnx'));
+const modelBytes = await readFile(join(MODELS_SRC, 'pattern_classifier.onnx'));
 const modelB64   = modelBytes.toString('base64');
-const modelMeta  = await readFile(join(__dirname, 'models/pattern_classifier_meta.json'), 'utf8');
+const modelMeta  = await readFile(join(MODELS_SRC, 'pattern_classifier_meta.json'), 'utf8');
 
 // Works in both browser (atob) and Node.js (Buffer)
 const decodeHelper = `\

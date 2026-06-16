@@ -132,8 +132,9 @@ function annotatePatterns(notes, bpm, meta = {}) {
         add("dd", dh[i].beat, [dh[i - 1], dh[i]]);
     }
     for (let i = 1; i < hand.length; i++) {
+      const dt = hand[i].beat - hand[i - 1].beat;
       const dx = hand[i].x - hand[i - 1].x, dy = hand[i].y - hand[i - 1].y;
-      if (Math.sqrt(dx * dx + dy * dy) >= 2) add("jump", hand[i].beat, [hand[i - 1], hand[i]]);
+      if (dt <= 2 && Math.sqrt(dx * dx + dy * dy) >= 2) add("jump", hand[i].beat, [hand[i - 1], hand[i]]);
     }
   }
   events.sort((a, b) => a.beat - b.beat);
