@@ -1,7 +1,7 @@
 import * as ort from 'onnxruntime-web';
 import { unzipSync } from 'fflate';
 import { loadEmbeddedClassifier } from 'bs-map-classifier/embedded';
-import { setOrtInstance, parseBeatmap, findDatFilename, parseMap } from 'bs-map-classifier';
+import { setOrtInstance, parseBeatmap, findDatFilename, extractPatternsAndClassifyMap } from 'bs-map-classifier';
 
 setOrtInstance(ort);
 
@@ -19,7 +19,7 @@ const infoDat = JSON.parse(Buffer.from(get('Info.dat')).toString());
 const datFile = JSON.parse(Buffer.from(get(findDatFilename(infoDat, CHARACTERISTIC, DIFFICULTY))).toString());
 
 const classifier = await loadEmbeddedClassifier();
-const { classification } = await parseMap(parseBeatmap(datFile), info.metadata.bpm, classifier);
+const { classification } = await extractPatternsAndClassifyMap(parseBeatmap(datFile), info.metadata.bpm, classifier);
 
 console.log(`"${info.metadata.songName}" — ${CHARACTERISTIC}/${DIFFICULTY}`);
 console.log(`Category: ${classification.category} (${(classification.confidence * 100).toFixed(1)}%)`);

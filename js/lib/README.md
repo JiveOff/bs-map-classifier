@@ -20,7 +20,7 @@ The `/embedded` subpath bundles the ONNX model at build time — no file paths, 
 
 ```js
 import { loadEmbeddedClassifier } from 'bs-map-classifier/embedded';
-import { parseBeatmap, findDatFilename, parseMap } from 'bs-map-classifier';
+import { parseBeatmap, findDatFilename, extractPatternsAndClassifyMap } from 'bs-map-classifier';
 import { readFile } from 'node:fs/promises';
 
 // Model is already baked into the package — call once and cache
@@ -31,8 +31,8 @@ const infoDat = JSON.parse(await readFile('Info.dat', 'utf8'));
 const datFile = findDatFilename(infoDat, 'Standard', 'ExpertPlus');
 const datJson = JSON.parse(await readFile(datFile, 'utf8'));
 
-// High-level: features + pattern annotation + classification in one call
-const result = await parseMap(parseBeatmap(datJson), /* bpm */ 180, clf);
+// Features + pattern annotation + classification in one call
+const result = await extractPatternsAndClassifyMap(parseBeatmap(datJson), /* bpm */ 180, clf);
 
 console.log(result.classification.category);    // e.g. "Tech"
 console.log(result.classification.confidence);  // e.g. 0.87
@@ -53,10 +53,8 @@ const { parseBeatmap }            = require('bs-map-classifier');
 
 ## Custom model path (advanced)
 
-If you want to provide your own model or load it differently:
-
 ```js
-import { loadClassifier, parseBeatmap, parseMap } from 'bs-map-classifier';
+import { loadClassifier, parseBeatmap, extractPatternsAndClassifyMap } from 'bs-map-classifier';
 
 const clf = await loadClassifier(
   '/path/to/pattern_classifier.onnx',
@@ -68,8 +66,8 @@ const clf = await loadClassifier(
 
 ```js
 import {
-  loadClassifierFromFetch, parseBeatmap, findDatFilename, parseMap,
-  setOrtInstance, setWasmPaths,
+  loadClassifierFromFetch, parseBeatmap, findDatFilename,
+  extractPatternsAndClassifyMap, setOrtInstance, setWasmPaths,
 } from 'bs-map-classifier';
 import * as ort from 'onnxruntime-web/wasm';
 
@@ -78,13 +76,11 @@ ort.env.wasm.numThreads = 1;
 setOrtInstance(ort);
 setWasmPaths('/wasm/');  // directory containing ort-wasm-simd-threaded.wasm
 
-const clf = await loadClassifierFromFetch(
+const clf    = await loadClassifierFromFetch(
   '/models/pattern_classifier.onnx',
   '/models/pattern_classifier_meta.json',
 );
-
-const beatmap = parseBeatmap(datJson);
-const result  = await parseMap(beatmap, bpm, clf);
+const result = await extractPatternsAndClassifyMap(parseBeatmap(datJson), bpm, clf);
 ```
 
 ## API
@@ -101,26 +97,38 @@ const result  = await parseMap(beatmap, bpm, clf);
 
 | Function | Description |
 |---|---|
-| `parseBeatmap(datJson)` | Parse a `.dat` file (v2, v3, v4 format auto-detected) → `{ notes, obstacles, arcs, chains, bombs }` |
+| `parseBeatmap(datJson)` | Parse a `.dat` file (v2, v3, v4 format auto-detected) → `ParsedBeatmap` |
 | `findDatFilename(infoDat, characteristic, difficulty)` | Look up the correct `.dat` filename from `Info.dat` |
 
-### High-level
+### High-level convenience
+
+| Function | Returns | Use when… |
+|---|---|---|
+| `extractPatterns(beatmap, bpm, meta?)` | `PatternResult` | You only need features and pattern events |
+| `classifyMap(beatmap, bpm, classifier)` | `Promise<ClassifyResult>` | You only need the category prediction |
+| `extractPatternsAndClassifyMap(beatmap, bpm, classifier, meta?)` | `Promise<MapAnalysisResult>` | You need everything |
 
 ```ts
-parseMap(parsedBeatmap, bpm, classifier?) → Promise<{
-  features:       Record<string, number>,   // 202 statistical features
-  patterns:       PatternEvent[],           // annotated pattern timeline
-  patternColors:  Record<string, string>,   // hex colours per pattern type
-  allNotes:       Note[],
-  classification?: { category, confidence, probabilities },
-}>
+// PatternResult
+{
+  features:      Record<string, number>,  // 202 statistical features
+  patterns:      PatternEvent[],          // annotated pattern timeline
+  patternColors: Record<string, string>,  // hex colours per pattern type
+  allNotes:      Note[],
+}
+
+// MapAnalysisResult extends PatternResult
+{
+  ...PatternResult,
+  classification: { category, confidence, probabilities },
+}
 ```
 
 ### Low-level
 
 ```ts
 classifyFromNotes(notes, obstacles, arcs, chains, bpm, bombs, classifier)
-  → Promise<{ category, confidence, probabilities }>
+  → Promise<ClassifyResult>
 
 computeFeatures(notes, obstacles, arcs, chains, bpm, bombs)
   → Record<string, number>
@@ -132,8 +140,8 @@ annotatePatterns(notes, bpm, meta?)
 ### Browser helpers
 
 ```ts
-setOrtInstance(ort)          // inject pre-loaded ORT runtime
-setWasmPaths(wasmDirUrl)     // set WASM directory before first session
+setOrtInstance(ort)       // inject pre-loaded ORT runtime
+setWasmPaths(wasmDirUrl)  // set WASM directory before first session
 ```
 
 ## Categories
@@ -148,7 +156,7 @@ setWasmPaths(wasmDirUrl)     // set WASM directory before first session
 
 ## Pattern types
 
-`annotatePatterns` returns events of these types: `double`, `scissor`, `crossover`, `crossover_scissor`, `stack`, `tower`, `stream`, `dd` (double-directional), `jump`, `invert`.
+`extractPatterns` and `extractPatternsAndClassifyMap` return events of these types: `double`, `scissor`, `crossover`, `crossover_scissor`, `stack`, `tower`, `stream`, `dd` (double-directional), `jump`, `invert`.
 
 ## License
 

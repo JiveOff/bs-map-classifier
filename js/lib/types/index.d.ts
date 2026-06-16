@@ -163,6 +163,59 @@ export function preprocess(
   meta: ClassifierMeta,
 ): Float32Array;
 
+// ── High-level convenience ────────────────────────────────────────────────────
+
+export interface PatternEvent {
+  type:   string;
+  label:  string;
+  beat:   number;
+  time:   number;
+  notes:  Note[];
+}
+
+export interface PatternResult {
+  features:      Record<string, number>;
+  patterns:      PatternEvent[];
+  patternColors: Record<string, string>;
+  allNotes:      Note[];
+}
+
+export interface MapAnalysisResult extends PatternResult {
+  classification: ClassifyResult;
+}
+
+/** Extract pattern features and named pattern events from a parsed beatmap. */
+export function extractPatterns(
+  parsedBeatmap: ParsedBeatmap,
+  bpm:           number,
+  meta?:         object,
+): PatternResult;
+
+/** Classify a parsed beatmap into a category. */
+export function classifyMap(
+  parsedBeatmap: ParsedBeatmap,
+  bpm:           number,
+  classifier:    Classifier,
+): Promise<ClassifyResult>;
+
+/** Extract pattern features, named pattern events, and classify in one call. */
+export function extractPatternsAndClassifyMap(
+  parsedBeatmap: ParsedBeatmap,
+  bpm:           number,
+  classifier:    Classifier,
+  meta?:         object,
+): Promise<MapAnalysisResult>;
+
+/**
+ * @deprecated Use extractPatterns(), classifyMap(), or extractPatternsAndClassifyMap() instead.
+ */
+export function parseMap(
+  parsedBeatmap: ParsedBeatmap,
+  bpm:           number,
+  classifier?:   Classifier | null,
+  meta?:         object,
+): Promise<PatternResult | MapAnalysisResult>;
+
 // ── Embedded model (bs-map-classifier/embedded) ───────────────────────────────
 
 /**
@@ -173,9 +226,9 @@ export function preprocess(
  *
  * @example
  * import { loadEmbeddedClassifier } from 'bs-map-classifier/embedded';
- * import { parseBeatmap, parseMap } from 'bs-map-classifier';
+ * import { parseBeatmap, extractPatternsAndClassifyMap } from 'bs-map-classifier';
  *
  * const clf    = await loadEmbeddedClassifier();
- * const result = await parseMap(parseBeatmap(datJson), bpm, clf);
+ * const result = await extractPatternsAndClassifyMap(parseBeatmap(datJson), bpm, clf);
  */
 export function loadEmbeddedClassifier(): Promise<Classifier>;

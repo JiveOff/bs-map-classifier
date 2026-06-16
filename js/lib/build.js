@@ -45,9 +45,13 @@ await writeFile(
 );
 
 await esbuild.build({
+  // CJS output is always consumed by Node.js, so compile from the node variants.
+  // This gives the CJS build a static onnxruntime-node import instead of the
+  // dynamic try/catch detection used by the default (universal) classify.js.
   entryPoints: [
-    'src/index.js', 'src/parser.js', 'src/features.js',
-    'src/classify.js', 'src/patterns.js',
+    { in: 'src/index.node.js', out: 'index' },
+    { in: 'src/classify.node.js', out: 'classify' },
+    'src/parser.js', 'src/features.js', 'src/patterns.js',
   ],
   format: 'cjs',
   platform: 'node',
