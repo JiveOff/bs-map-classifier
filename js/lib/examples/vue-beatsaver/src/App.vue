@@ -1,66 +1,110 @@
-<script setup>
-import { ref } from 'vue';
-import { useClassifier } from './composables/useClassifier.js';
-import ResultCard from './components/ResultCard.vue';
+<script setup lang="ts">
+import { useClassifier } from './composables/useClassifier';
+import InputPanel from './components/InputPanel.vue';
+import Loader     from './components/Loader.vue';
+import ResultPanel from './components/ResultPanel.vue';
+import type { DiffPair } from './types';
 
-const mapKey    = ref('2b120');
-const difficulty = ref('ExpertPlus');
-
-const { ready, busy, status, result, classify } = useClassifier();
-
-function submit() {
-  classify(mapKey.value.trim(), difficulty.value.trim() || 'ExpertPlus');
-}
+const {
+  ready, busy, loading, loadingText, status, isError, payload,
+  classifyFromKey, classifyFromZip, classifyFromDat,
+} = useClassifier();
 </script>
 
 <template>
-  <main>
-    <h1>Beat Saber Map Classifier</h1>
-    <p>Enter a BeatSaver map key to classify it into Tech / Speed / Accuracy / Standard / Extreme.</p>
+  <div class="wrap">
+    <header>
+      <div class="logo">
+        <div class="saber red" />
+        <h1>BS Map Classifier</h1>
+        <div class="saber blue" />
+      </div>
+      <p class="tagline">ML-powered Beat Saber map classification · 88.89% accuracy · 85.13% CV F1</p>
+    </header>
 
-    <form class="row" @submit.prevent="submit">
-      <input v-model="mapKey"     placeholder="Map key (e.g. 2b120)" />
-      <input v-model="difficulty" placeholder="Difficulty" class="diff-input" />
-      <button type="submit" :disabled="!ready || busy">Classify</button>
-    </form>
+    <InputPanel
+      :ready="ready"
+      :busy="busy"
+      :status="status"
+      :is-error="isError"
+      @classify-key="(key: string, pairs: DiffPair[], char: string, diff: string) => classifyFromKey(key, pairs, char, diff)"
+      @classify-zip="(buf: ArrayBuffer, char: string, diff: string, name: string) => classifyFromZip(buf, char, diff, name)"
+      @classify-dat="(buf: ArrayBuffer, bpm: number, name: string) => classifyFromDat(buf, bpm, name)"
+    />
 
-    <p class="status">{{ status }}</p>
+    <Loader v-if="loading" :text="loadingText" />
 
-    <Transition name="fade">
-      <ResultCard v-if="result" v-bind="result" />
+    <Transition name="result">
+      <ResultPanel v-if="payload" :meta="payload.meta" :result="payload.result" />
     </Transition>
-  </main>
+
+    <div class="panel how-it-works">
+      <div class="section-label">// how it works</div>
+      <p>
+        The classifier parses the actual <strong>.dat beatmap file</strong> — the raw note data a player hits — and extracts 125 features:
+        NJS, jump distance, reaction time, NPS bursts, SPS per hand (via bsmap), eBPM, direction histograms, lane/layer usage,
+        rotation, and counts of named patterns (crossovers, doubles, streams, inverts, hooks, etc.).
+      </p>
+      <p>
+        Those features are fed into a <strong>LightGBM classifier</strong> trained on 493 maps from the
+        <a href="https://cube.community/pooling">BSWC pooling database</a> — a curated set of competitive maps labelled
+        by the BSWC pooling team. The model runs fully in-browser via ONNX Runtime WebAssembly; no server, no metadata API call needed.
+      </p>
+      <p>
+        <strong>88.89% accuracy · 85.13% CV F1</strong> &nbsp;·&nbsp; 493 maps &nbsp;·&nbsp; 5 classes &nbsp;·&nbsp;
+        Accuracy = 100% · Speed ≈ 95% · Standard ≈ 90% · Tech ≈ 84% · Extreme ≈ 76%
+      </p>
+    </div>
+  </div>
+
+  <footer>
+    <a href="https://github.com/JiveOff/bs-map-classifier">GitHub</a> ·
+    <a href="https://www.npmjs.com/package/bs-map-classifier">npm</a> ·
+    data from <a href="https://beatsaver.com">BeatSaver</a>
+  </footer>
 </template>
 
-<style>
-*, *::before, *::after { box-sizing: border-box; }
+<style scoped>
+.wrap   { position: relative; z-index: 1; width: 100%; max-width: 680px; }
 
-body {
-  margin: 0;
-  font-family: system-ui, sans-serif;
-  background: #0f0f0f;
-  color: #e0e0e0;
+header  { text-align: center; margin-bottom: 48px; }
+.logo   { display: inline-flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+
+.saber       { width: 28px; height: 4px; border-radius: 2px; box-shadow: 0 0 8px currentColor, 0 0 20px currentColor; }
+.saber.red   { background: #ef4444; color: #ef4444; }
+.saber.blue  { background: #60a5fa; color: #60a5fa; }
+
+h1 {
+  font-family: 'Orbitron', sans-serif;
+  font-size: clamp(1.4rem, 5vw, 2.2rem);
+  font-weight: 900;
+  letter-spacing: 0.15em;
+  color: #fff;
+  text-transform: uppercase;
 }
 
-main {
-  max-width: 640px;
-  margin: 40px auto;
-  padding: 0 16px;
+.tagline { font-size: 0.8rem; color: var(--muted); letter-spacing: 0.1em; margin-top: 6px; }
+
+.how-it-works { font-size: 0.72rem; line-height: 1.9; color: var(--muted); }
+.how-it-works p          { margin-bottom: 10px; }
+.how-it-works p:last-child { margin-bottom: 0; }
+.how-it-works :deep(strong) { color: var(--text); }
+.how-it-works a          { color: inherit; text-decoration: underline; text-underline-offset: 3px; }
+.section-label           { font-size: 0.65rem; letter-spacing: 0.2em; text-transform: uppercase; margin-bottom: 12px; color: var(--text); }
+
+footer {
+  position: relative;
+  z-index: 1;
+  text-align: center;
+  margin-top: 48px;
+  font-size: 0.65rem;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  line-height: 2;
 }
+footer a { color: inherit; text-decoration: underline; text-underline-offset: 3px; }
 
-h1 { font-size: 1.4rem; color: #fff; margin: 0 0 4px; }
-p  { color: #888; margin: 0 0 20px; font-size: 0.85rem; }
-
-.row   { display: flex; gap: 8px; margin-bottom: 16px; }
-
-input  { flex: 1; padding: 8px 12px; border-radius: 6px; border: 1px solid #333; background: #1a1a1a; color: #fff; font-size: 0.9rem; }
-input.diff-input { flex: 0 0 130px; }
-
-button { padding: 8px 18px; border-radius: 6px; border: none; background: #4f46e5; color: #fff; cursor: pointer; font-size: 0.9rem; }
-button:disabled { opacity: 0.5; cursor: default; }
-
-.status { font-size: 0.8rem; color: #888; min-height: 1.2em; margin-bottom: 16px; }
-
-.fade-enter-active, .fade-leave-active { transition: opacity 0.25s ease; }
-.fade-enter-from, .fade-leave-to       { opacity: 0; }
+.result-enter-active { animation: fadeUp 0.4s ease both; }
+.result-leave-active { transition: opacity 0.2s; }
+.result-leave-to     { opacity: 0; }
 </style>

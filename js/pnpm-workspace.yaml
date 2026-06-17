@@ -6,3 +6,4 @@ onlyBuiltDependencies:
   - esbuild
   - onnxruntime-node
   - protobufjs
+minimumReleaseAge: 0

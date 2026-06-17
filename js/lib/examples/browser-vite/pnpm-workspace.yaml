@@ -1,5 +1,1 @@
-allowBuilds:
-  esbuild: set this to true or false
-  protobufjs: set this to true or false
-minimumReleaseAgeExclude:
-  - bs-map-classifier@1.1.0
+minimumReleaseAge: 0

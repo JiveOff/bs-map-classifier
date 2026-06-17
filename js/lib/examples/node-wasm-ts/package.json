@@ -1,13 +1,17 @@
 {
-  "name": "bs-map-classifier-node-wasm-example",
+  "name": "bs-map-classifier-node-wasm-ts-example",
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "start": "node index.mjs"
+    "start": "tsx index.ts"
   },
   "dependencies": {
     "bs-map-classifier": "^1.1.1",
     "fflate": "^0.8.3",
     "onnxruntime-web": "^1.26.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
   }
 }

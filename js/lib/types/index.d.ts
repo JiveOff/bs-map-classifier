@@ -78,11 +78,26 @@ export function findDatFilename(
   difficulty:     string,
 ): string;
 
+export interface DatInfo {
+  filename:  string;
+  njs:       number;
+  njsOffset: number;
+}
+
+/**
+ * Locate the .dat filename and extract NJS / NJS offset for a given
+ * characteristic + difficulty from a parsed Info.dat object.
+ */
+export function findDatInfo(
+  infoDat:        object,
+  characteristic: string,
+  difficulty:     string,
+): DatInfo;
+
 // ── Feature extraction ────────────────────────────────────────────────────────
 
 /**
- * Compute all 202 pattern features from parsed beatmap data.
- * Mirrors Python's compute_pattern_features() + compute_windowed_features().
+ * Compute all pattern features from parsed beatmap data.
  */
 export function computeFeatures(
   notes:     Note[],
@@ -91,6 +106,8 @@ export function computeFeatures(
   chains:    object[],
   bpm:       number,
   bombs?:    Note[],
+  njs?:      number,
+  njsOffset?: number,
 ): Record<string, number>;
 
 /**
@@ -104,55 +121,31 @@ export function toFeatureVector(
 
 // ── Model loading ─────────────────────────────────────────────────────────────
 
-/**
- * Load model from filesystem paths. Node.js only.
- */
+/** Inject an ORT runtime instance. In Node.js, also accepts an execution provider. */
+export function setOrtInstance(ort: unknown, provider?: string): void;
+
+/** Set WASM file paths on the ORT runtime before any session is created. */
+export function setWasmPaths(wasmDir: string): Promise<void>;
+
+/** Load model from filesystem paths. Node.js only. */
 export function loadClassifier(
   modelPath: string,
   metaPath:  string,
 ): Promise<Classifier>;
 
-/**
- * Load model via fetch(). Works in browsers, Deno, and Node.js ≥ 18.
- * Requires onnxruntime-web to be installed.
- *
- * Note: onnxruntime-web serves its WASM engine as a separate file.
- * If the WASM file is not co-located with your JS bundle, set its location:
- *   import { env } from 'onnxruntime-web';
- *   env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.21/dist/';
- */
+/** Load model via fetch(). Works in browsers and Node.js ≥ 18. */
 export function loadClassifierFromFetch(
   modelUrl: string | URL,
   metaUrl:  string | URL,
 ): Promise<Classifier>;
 
-/**
- * Load from pre-fetched buffers. Works in any environment.
- */
+/** Load from pre-fetched buffers. Works in any environment. */
 export function loadClassifierFromBuffers(
   modelBuffer: ArrayBuffer,
   meta:        ClassifierMeta,
 ): Promise<Classifier>;
 
 // ── Inference ─────────────────────────────────────────────────────────────────
-
-/**
- * Run the full pipeline: parsed beatmap → category prediction.
- *
- * @example
- * const { notes, obstacles, arcs, chains, bombs } = parseBeatmap(datJson);
- * const result = await classifyFromNotes(notes, obstacles, arcs, chains, bpm, bombs, clf);
- * console.log(result.category, result.confidence);
- */
-export function classifyFromNotes(
-  notes:      Note[],
-  obstacles:  Obstacle[],
-  arcs:       object[],
-  chains:     object[],
-  bpm:        number,
-  bombs:      Note[],
-  classifier: Classifier,
-): Promise<ClassifyResult>;
 
 /**
  * Apply median imputation and StandardScaler in-place.
@@ -163,7 +156,22 @@ export function preprocess(
   meta: ClassifierMeta,
 ): Float32Array;
 
-// ── High-level convenience ────────────────────────────────────────────────────
+/**
+ * Run the full pipeline: parsed beatmap → category prediction.
+ */
+export function classifyFromNotes(
+  notes:      Note[],
+  obstacles:  Obstacle[],
+  arcs:       object[],
+  chains:     object[],
+  bpm:        number,
+  bombs:      Note[],
+  classifier: Classifier,
+  njs?:       number,
+  njsOffset?: number,
+): Promise<ClassifyResult>;
+
+// ── Pattern annotation ────────────────────────────────────────────────────────
 
 export interface PatternEvent {
   type:   string;
@@ -172,6 +180,32 @@ export interface PatternEvent {
   time:   number;
   notes:  Note[];
 }
+
+export interface AnnotationResult {
+  patterns:  PatternEvent[];
+  colors:    Record<string, string>;
+  all_notes: Note[];
+}
+
+/** Map of pattern type → hex color string used for the viewer overlay. */
+export const PATTERN_COLORS: Record<string, string>;
+
+/** Map of pattern type → human-readable label. */
+export const TYPE_LABELS: Record<string, string>;
+
+/**
+ * Annotate notes with named pattern events.
+ * Single source of truth for all pattern detection.
+ */
+export function annotatePatterns(
+  notes:      Note[],
+  bpm:        number,
+  meta?:      object,
+  obstacles?: Obstacle[],
+  bombs?:     Note[],
+): AnnotationResult;
+
+// ── High-level convenience ────────────────────────────────────────────────────
 
 export interface PatternResult {
   features:      Record<string, number>;
@@ -186,24 +220,28 @@ export interface MapAnalysisResult extends PatternResult {
 
 /** Extract pattern features and named pattern events from a parsed beatmap. */
 export function extractPatterns(
-  parsedBeatmap: ParsedBeatmap,
+  parsedBeatmap: ParsedBeatmap & { njs?: number; njsOffset?: number },
   bpm:           number,
   meta?:         object,
 ): PatternResult;
 
 /** Classify a parsed beatmap into a category. */
 export function classifyMap(
-  parsedBeatmap: ParsedBeatmap,
+  parsedBeatmap: ParsedBeatmap & { njs?: number; njsOffset?: number },
   bpm:           number,
   classifier:    Classifier,
+  njs?:          number,
+  njsOffset?:    number,
 ): Promise<ClassifyResult>;
 
 /** Extract pattern features, named pattern events, and classify in one call. */
 export function extractPatternsAndClassifyMap(
-  parsedBeatmap: ParsedBeatmap,
+  parsedBeatmap: ParsedBeatmap & { njs?: number; njsOffset?: number },
   bpm:           number,
   classifier:    Classifier,
   meta?:         object,
+  njs?:          number,
+  njsOffset?:    number,
 ): Promise<MapAnalysisResult>;
 
 /**
@@ -223,12 +261,5 @@ export function parseMap(
  * No paths or URLs needed — works offline and in any environment.
  *
  * Exported from the `bs-map-classifier/embedded` subpath.
- *
- * @example
- * import { loadEmbeddedClassifier } from 'bs-map-classifier/embedded';
- * import { parseBeatmap, extractPatternsAndClassifyMap } from 'bs-map-classifier';
- *
- * const clf    = await loadEmbeddedClassifier();
- * const result = await extractPatternsAndClassifyMap(parseBeatmap(datJson), bpm, clf);
  */
 export function loadEmbeddedClassifier(): Promise<Classifier>;

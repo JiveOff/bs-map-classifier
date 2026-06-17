@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       bs-map-classifier:
-        specifier: ^1.1.0
-        version: 1.1.0(onnxruntime-node@1.26.0)
+        specifier: ^1.1.1
+        version: 1.1.1(onnxruntime-node@1.26.0)
       onnxruntime-node:
         specifier: ^1.19.0
         version: 1.26.0
@@ -24,8 +24,8 @@ packages:
     resolution: {integrity: sha512-+Ut8d9LLqwEvHHJl1+PIHqoyDxFgVN847JTVM3Izi3xHDWPE4UtzzXysMZQs64DMcrJfBeS/uoEP4AD3HQHnQQ==}
     engines: {node: '>=12.0'}
 
-  bs-map-classifier@1.1.0:
-    resolution: {integrity: sha512-MUMSzMS/TKWZYNxk5xRRUQ1Ha0rWjvAooXt6u5abBgocJOtshStzd620iqXJQNPhPfmsblYyoxA7A3GXaHT2gA==}
+  bs-map-classifier@1.1.1:
+    resolution: {integrity: sha512-yJoG1QcXRcwvjuAZEaIpejSeUZ5aVI1KHE2qPQBUj5n4OaQr+UoPU1LXO4aW40Gh0IwIeaHS7WmRa2UTddkXfQ==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
       onnxruntime-node: '>=1.17.0'
@@ -116,7 +116,7 @@ snapshots:
 
   adm-zip@0.5.17: {}
 
-  bs-map-classifier@1.1.0(onnxruntime-node@1.26.0):
+  bs-map-classifier@1.1.1(onnxruntime-node@1.26.0):
     dependencies:
       bsmap: 2.3.5
     optionalDependencies:

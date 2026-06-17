@@ -6,7 +6,7 @@
     "start": "node index.mjs"
   },
   "dependencies": {
-    "bs-map-classifier": "^1.1.0",
+    "bs-map-classifier": "^1.1.1",
     "onnxruntime-node": "^1.19.0"
   }
 }
