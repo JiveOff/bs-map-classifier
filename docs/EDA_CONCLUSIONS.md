@@ -111,11 +111,3 @@ NJS is high (20.5) but just below Speed (21.5). The difference is that Extreme m
 | **Mean rotation** | ★ Lowest | Medium | ★ Highest | Medium | Low |
 | **Lateral cuts** | High | None | None | Low | High |
 | **How distinctive** | Strong | Strong | Strong | Weak | Strong |
-
----
-
-## Things that weren't what we expected
-
-- **Speed has more rhythmic variability than Tech** — stream maps alternate between very dense and very sparse sections, which creates more timing variation than tech patterns do.
-- **Tech is not fast** — its eBPM matches Standard. If you removed all the crossovers and walls and just looked at swing speed, Tech would be indistinguishable from a Standard map.
-- **Standard has no clear identity in the data** — it's defined by exclusion, not by any feature being notably high or low. This makes it the most frequently confused category.
