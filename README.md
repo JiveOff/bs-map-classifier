@@ -295,6 +295,7 @@ See [`docs/RESULTS.md`](docs/RESULTS.md) for full per-class breakdowns and findi
 - [BSWC Pooling Team](https://cube.community/pooling) — initial dataset of categorised maps used for training
 - [BSMG Wiki](https://bsmg.wiki/) — mapping format documentation
 - [BeatSaver](https://beatsaver.com/) — map data and API
+- [BeatSaber-JSMap](https://github.com/KivalEvan/BeatSaber-JSMap) by Kival Evan - additional features
 
 ---
 
