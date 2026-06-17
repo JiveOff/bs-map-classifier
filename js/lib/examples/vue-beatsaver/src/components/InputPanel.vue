@@ -84,8 +84,8 @@ async function classify() {
 
 const canClassify = computed(() => {
   if (!props.ready || props.busy) return false
-  if (tab.value === 'key') return !!mapKey.value.trim()
-  if (tab.value === 'zip') return !!zipBuf.value && !!zipChar.value
+  if (tab.value === 'key') return !!mapKey.value.trim() && !!keyChar.value && !!keyDiff.value
+  if (tab.value === 'zip') return !!zipBuf.value && !!zipChar.value && !!zipDiff.value
   return !!datBuf.value && !!datBpm.value
 })
 </script>
@@ -146,7 +146,7 @@ const canClassify = computed(() => {
     </div>
 
     <button class="btn-classify" :disabled="!canClassify" @click="classify">Classify</button>
-    <div class="status" :class="{ error: isError }">{{ status }}</div>
+    <div v-if="status" class="status" :class="{ error: isError }">{{ status }}</div>
   </div>
 </template>
 
@@ -166,6 +166,6 @@ const canClassify = computed(() => {
 .btn-classify:active  { transform: scale(0.98); }
 .btn-classify:disabled{ opacity: 0.35; cursor: not-allowed; }
 
-.status       { font-size: 0.72rem; letter-spacing: 0.08em; color: var(--muted); min-height: 18px; transition: color 0.2s; margin-top: 14px; }
+.status       { font-size: 0.72rem; letter-spacing: 0.08em; color: var(--muted); transition: color 0.2s; margin-top: 14px; }
 .status.error { color: #f87171; }
 </style>
