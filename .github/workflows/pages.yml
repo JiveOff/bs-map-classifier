@@ -37,15 +37,7 @@ jobs:
         with:
           node-version: '20'
           cache: pnpm
-          cache-dependency-path: js/pnpm-lock.yaml
-
-      - name: Install workspace
-        working-directory: js
-        run: pnpm install --ignore-scripts
-
-      - name: Build library
-        working-directory: js/lib
-        run: node build.js
+          cache-dependency-path: js/lib/examples/vue-beatsaver/pnpm-lock.yaml
 
       - name: Install Vue demo
         working-directory: js/lib/examples/vue-beatsaver
