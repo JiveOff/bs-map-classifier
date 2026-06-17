@@ -3,8 +3,8 @@ import { setOrtInstance, setWasmPaths, extractPatternsAndClassifyMap } from 'bs-
 import { loadFromKey } from 'bs-map-classifier/beatsaver';
 import { loadEmbeddedClassifier } from 'bs-map-classifier/embedded';
 
-await setWasmPaths(new URL('./node_modules/onnxruntime-web/dist/', import.meta.url).href);
 setOrtInstance(ort, 'wasm');
+await setWasmPaths(new URL('./node_modules/onnxruntime-web/dist/', import.meta.url).href);
 
 const MAP_KEY        = '2b120';
 const CHARACTERISTIC = 'Standard';

@@ -47,13 +47,9 @@ jobs:
         working-directory: js/lib
         run: node build.js
 
-      - name: Pack library
-        working-directory: js/lib
-        run: pnpm pack --pack-destination /tmp/bsmc
-
       - name: Install Vue demo
         working-directory: js/lib/examples/vue-beatsaver
-        run: pnpm install /tmp/bsmc/bs-map-classifier-*.tgz
+        run: pnpm install
 
       - name: Build Vue demo
         working-directory: js/lib/examples/vue-beatsaver
