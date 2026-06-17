@@ -14,11 +14,10 @@
 
 import { test }          from 'node:test';
 import assert            from 'node:assert/strict';
-import { inflateRawSync } from 'node:zlib';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseBeatmap, findDatFilename, findDatInfo } from '../src/parser.js';
+import { loadFromKey }   from '../src/beatsaver.js';
 import { loadClassifier, classifyFromNotes } from '../src/classify.node.js';
 import { extractPatternsAndClassifyMap } from '../src/map.js';
 
@@ -58,76 +57,6 @@ const KNOWN_MAPS = [
   { key: '3b2f8', expected: 'Extreme',   label: 'Kyuukou'                                       },
 ];
 
-// ── Minimal ZIP reader (no external deps) ────────────────────────────────────
-// Uses the Central Directory at the end of the ZIP for correct offsets,
-// avoiding false-positive PK signatures inside compressed data.
-
-function parseZip(buf) {
-  // Find End of Central Directory record (scan backwards from end)
-  let eocd = -1;
-  for (let i = buf.length - 22; i >= Math.max(0, buf.length - 65558); i--) {
-    if (buf.readUInt32LE(i) === 0x06054b50) { eocd = i; break; }
-  }
-  if (eocd === -1) throw new Error('No End of Central Directory record found');
-
-  const cdOffset = buf.readUInt32LE(eocd + 16);
-  const cdSize   = buf.readUInt32LE(eocd + 12);
-  const entries  = {};
-
-  let i = cdOffset;
-  while (i < cdOffset + cdSize && i < buf.length - 4) {
-    if (buf.readUInt32LE(i) !== 0x02014b50) break; // Central directory entry sig
-    const method         = buf.readUInt16LE(i + 10);
-    const compSize       = buf.readUInt32LE(i + 20);
-    const filenameLen    = buf.readUInt16LE(i + 28);
-    const extraLen       = buf.readUInt16LE(i + 30);
-    const commentLen     = buf.readUInt16LE(i + 32);
-    const localOffset    = buf.readUInt32LE(i + 42);
-    const filename       = buf.subarray(i + 46, i + 46 + filenameLen).toString('utf8');
-
-    // Jump to local file header to get actual data offset
-    const lhFilenameLen = buf.readUInt16LE(localOffset + 26);
-    const lhExtraLen    = buf.readUInt16LE(localOffset + 28);
-    const dataStart     = localOffset + 30 + lhFilenameLen + lhExtraLen;
-
-    if (compSize > 0 && !filename.endsWith('/')) {
-      const raw = buf.subarray(dataStart, dataStart + compSize);
-      entries[filename] = method === 8 ? inflateRawSync(raw) : raw;
-    }
-
-    i += 46 + filenameLen + extraLen + commentLen;
-  }
-
-  return entries;
-}
-
-function getEntry(zip, name) {
-  const key = Object.keys(zip).find(k => k.toLowerCase() === name.toLowerCase());
-  return key ? zip[key] : null;
-}
-
-function getDatEntry(zip, resolvedName, characteristic, difficulty) {
-  // 1. Try the exact resolved name
-  let entry = getEntry(zip, resolvedName);
-  if (entry) return { entry, name: resolvedName };
-
-  // 2. Try common fallback patterns (v4 maps may omit characteristic)
-  for (const candidate of [`${difficulty}.dat`, `${difficulty}${characteristic}.dat`]) {
-    entry = getEntry(zip, candidate);
-    if (entry) return { entry, name: candidate };
-  }
-
-  // 3. Find any .dat that starts with the difficulty name (case-insensitive)
-  const diffLow = difficulty.toLowerCase();
-  const key = Object.keys(zip).find(
-    k => k.toLowerCase().startsWith(diffLow) && k.toLowerCase().endsWith('.dat') &&
-         k.toLowerCase() !== 'info.dat'
-  );
-  if (key) return { entry: zip[key], name: key };
-
-  return null;
-}
-
 // ── BeatSaver fetch + cache ───────────────────────────────────────────────────
 
 async function fetchMap(key, characteristic = 'Standard', difficulty = 'ExpertPlus') {
@@ -140,43 +69,22 @@ async function fetchMap(key, characteristic = 'Standard', difficulty = 'ExpertPl
     return JSON.parse(readFileSync(cachePath, 'utf8'));
   }
 
-  // Fetch metadata
-  const info = await fetch(`https://beatsaver.com/api/maps/id/${key}`)
-    .then(r => { if (!r.ok) throw new Error(`BeatSaver API ${r.status} for key ${key}`); return r.json(); });
+  const { beatmap, bpm, njs, njsOffset, songName } =
+    await loadFromKey(key, characteristic, difficulty);
 
-  const version = info.versions.at(-1);
-  const bpm     = info.metadata.bpm;
-
-  // Download and parse zip
-  const zipBuf  = await fetch(`https://cdn.beatsaver.com/${version.hash}.zip`)
-    .then(r => { if (!r.ok) throw new Error(`CDN ${r.status} for ${version.hash}`); return r.arrayBuffer(); })
-    .then(ab => Buffer.from(ab));
-
-  const zip      = parseZip(zipBuf);
-  const infoDat  = JSON.parse((getEntry(zip, 'Info.dat') ?? getEntry(zip, 'info.dat')).toString('utf8'));
-  const datInfo    = findDatInfo(infoDat, characteristic, difficulty);
-  const datResult  = getDatEntry(zip, datInfo.filename, characteristic, difficulty);
-  if (!datResult) throw new Error(
-    `Difficulty file "${datInfo.filename}" not found in zip for ${key}. ` +
-    `Available .dat files: ${Object.keys(zip).filter(k => k.endsWith('.dat')).join(', ')}`
-  );
-  const datEntry = datResult.entry;
-  const datJson  = JSON.parse(datEntry.toString('utf8'));
-
-  const parsed = parseBeatmap(datJson);
   const result = {
     key,
-    label:          info.metadata.songName,
+    label:      songName,
     characteristic,
     difficulty,
     bpm,
-    njs:            datInfo.njs,
-    njsOffset:      datInfo.njsOffset,
-    notes:          parsed.notes,
-    obstacles:      parsed.obstacles,
-    arcs:           parsed.arcs,
-    chains:         parsed.chains,
-    bombs:          parsed.bombs,
+    njs,
+    njsOffset,
+    notes:      beatmap.notes,
+    obstacles:  beatmap.obstacles,
+    arcs:       beatmap.arcs,
+    chains:     beatmap.chains,
+    bombs:      beatmap.bombs,
   };
 
   writeFileSync(cachePath, JSON.stringify(result));

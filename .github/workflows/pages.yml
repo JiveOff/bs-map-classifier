@@ -3,7 +3,11 @@ name: Deploy GitHub Pages
 on:
   push:
     branches: [main]
-    paths: [web/**]
+    paths:
+      - 'js/lib/src/**'
+      - 'js/lib/types/**'
+      - 'js/lib/build.js'
+      - 'js/lib/examples/vue-beatsaver/**'
   workflow_dispatch:
 
 permissions:
@@ -21,11 +25,45 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
+
     steps:
       - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: pnpm
+          cache-dependency-path: js/pnpm-lock.yaml
+
+      - name: Install workspace
+        working-directory: js
+        run: pnpm install --ignore-scripts
+
+      - name: Build library
+        working-directory: js/lib
+        run: node build.js
+
+      - name: Pack library
+        working-directory: js/lib
+        run: pnpm pack --pack-destination /tmp/bsmc
+
+      - name: Install Vue demo
+        working-directory: js/lib/examples/vue-beatsaver
+        run: pnpm install /tmp/bsmc/bs-map-classifier-*.tgz
+
+      - name: Build Vue demo
+        working-directory: js/lib/examples/vue-beatsaver
+        run: pnpm run build
+
       - uses: actions/configure-pages@v5
+
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: web/
+          path: js/lib/examples/vue-beatsaver/dist/
+
       - uses: actions/deploy-pages@v4
         id: deploy

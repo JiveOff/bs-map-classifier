@@ -39,6 +39,18 @@ jobs:
         working-directory: js
         run: pnpm --filter bs-pattern-overlay run build
 
+      - name: Pack library
+        working-directory: js/lib
+        run: pnpm pack --pack-destination /tmp/bsmc
+
+      - name: Install Vue demo
+        working-directory: js/lib/examples/vue-beatsaver
+        run: pnpm install /tmp/bsmc/bs-map-classifier-*.tgz
+
+      - name: Typecheck & build Vue demo
+        working-directory: js/lib/examples/vue-beatsaver
+        run: pnpm run build
+
       - name: Upload dist artifact
         uses: actions/upload-artifact@v4
         with:
