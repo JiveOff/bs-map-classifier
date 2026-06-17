@@ -418,7 +418,7 @@
     ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/';
     ort.env.wasm.numThreads = 1;
 
-    import { setOrtInstance, parseBeatmap, findDatFilename, findDatInfo, extractPatternsAndClassifyMap } from 'https://esm.sh/bs-map-classifier';
+    import { setOrtInstance, parseBeatmap, findDatFilename, extractPatternsAndClassifyMap } from 'https://esm.sh/bs-map-classifier';
     import { unzipSync } from 'https://esm.sh/fflate';
 
     setOrtInstance(ort);
@@ -678,12 +678,32 @@
       if (!infoRaw) throw new Error('Info.dat not found in zip');
       const infoDat = JSON.parse(decode(infoRaw));
 
-      const bpm     = infoDat._beatsPerMinute ?? null;
-      const datInfo = (findDatInfo ?? (() => ({ filename: findDatFilename(infoDat, char, diff), njs: 0, njsOffset: 0 })))(infoDat, char, diff);
-      const datRaw  = getFile(datInfo.filename);
-      if (!datRaw) throw new Error(`"${datInfo.filename}" not found in zip — check characteristic/difficulty`);
+      const bpm      = infoDat._beatsPerMinute ?? null;
+      const datName  = findDatFilename(infoDat, char, diff);
+      const datRaw   = getFile(datName);
+      if (!datRaw) throw new Error(`"${datName}" not found in zip — check characteristic/difficulty`);
 
-      return { datJson: JSON.parse(decode(datRaw)), infoDat, bpm, njs: datInfo.njs, njsOffset: datInfo.njsOffset };
+      // Extract NJS + offset from Info.dat (v2: _noteJumpMovementSpeed, v4: noteJumpMovementSpeed)
+      const cLow = char.toLowerCase(), dLow = diff.toLowerCase();
+      let njs = 0, njsOffset = 0;
+      for (const s of infoDat._difficultyBeatmapSets ?? []) {
+        if ((s._beatmapCharacteristicName ?? '').toLowerCase() !== cLow) continue;
+        for (const d of s._difficultyBeatmaps ?? []) {
+          if ((d._difficulty ?? '').toLowerCase() === dLow) {
+            njs = parseFloat(d._noteJumpMovementSpeed) || 0;
+            njsOffset = parseFloat(d._noteJumpStartBeatOffset) || 0;
+          }
+        }
+      }
+      for (const d of infoDat.difficultyBeatmaps ?? []) {
+        if ((d.characteristic ?? '').toLowerCase() === cLow &&
+            (d.difficulty ?? '').toLowerCase() === dLow) {
+          njs = parseFloat(d.noteJumpMovementSpeed) || 0;
+          njsOffset = parseFloat(d.noteJumpStartBeatOffset) || 0;
+        }
+      }
+
+      return { datJson: JSON.parse(decode(datRaw)), infoDat, bpm, njs, njsOffset };
     }
 
     function renderResults(meta, result) {
