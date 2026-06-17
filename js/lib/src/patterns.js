@@ -160,6 +160,8 @@ export function annotatePatterns(notes, bpm, meta = {}, obstacles = [], bombs = 
   const sortedSlots = [...slots].sort((a, b) => a[0] - b[0]).map(([, g]) => g);
 
   // ── Slot-based patterns ───────────────────────────────────────────────────
+  const stacksForVb = []; // [{beat, lane}] for vision_block pass
+
   for (const grp of sortedSlots) {
     const beat  = Math.min(...grp.map(n => n.beat));
     const reds  = grp.filter(n => n.color === 0);
@@ -179,25 +181,26 @@ export function annotatePatterns(notes, bpm, meta = {}, obstacles = [], bombs = 
         if (!byLane.has(n.x)) byLane.set(n.x, []);
         byLane.get(n.x).push(n);
       }
-      for (const col of byLane.values()) {
-        if (col.length >= 3)       add('tower',  beat, col);
-        else if (col.length === 2) add('stack',  beat, col);
+      for (const [lane, col] of byLane) {
+        if (col.length >= 3) { add('tower', beat, col); stacksForVb.push({ beat, lane }); }
+        else if (col.length === 2) { add('stack', beat, col); stacksForVb.push({ beat, lane }); }
       }
 
-      // Window: same-color same-lane with layer gap ≥ 2, middle layer absent
-      for (const lns of byLane.values()) {
-        if (lns.length >= 2) {
-          const ys = lns.map(n => n.y);
-          const yMax = Math.max(...ys), yMin = Math.min(...ys);
-          if (yMax - yMin >= 2 && lns.length < (yMax - yMin + 1))
-            add('window', beat, lns);
+      // Flower: ≥2 same-color notes at same (x,y) with different directions ≤90° apart
+      const byPos = new Map();
+      for (const n of hand) {
+        const k = `${n.x},${n.y}`;
+        if (!byPos.has(k)) byPos.set(k, []);
+        byPos.get(k).push(n);
+      }
+      for (const posNotes of byPos.values()) {
+        const dp = posNotes.filter(n => n.direction !== 8);
+        for (let pi = 0; pi < dp.length; pi++) {
+          for (let pj = pi + 1; pj < dp.length; pj++) {
+            if (angleDiff(DIR_ANGLES[dp[pi].direction], DIR_ANGLES[dp[pj].direction]) <= 90)
+              add('flower', beat, [dp[pi], dp[pj]]);
+          }
         }
-      }
-
-      // Flower: ≥3 same-color same-beat with ≥2 distinct non-dot directions
-      if (hand.length >= 3) {
-        const dirs = new Set(hand.filter(n => n.direction !== 8).map(n => n.direction));
-        if (dirs.size >= 2) add('flower', beat, hand);
       }
 
       // Loloppe: same-beat same-hand same-direction adjacent-lane notes
@@ -214,7 +217,14 @@ export function annotatePatterns(notes, bpm, meta = {}, obstacles = [], bombs = 
       }
     }
 
-    // Handclap: right-moving red + left-moving blue in same slot
+    // Window: any note at y=0 AND y=2 with no note at y=1 in the slot
+    {
+      const allYs = new Set(grp.map(n => n.y));
+      if (allYs.has(0) && allYs.has(2) && !allYs.has(1))
+        add('window', beat, grp);
+    }
+
+    // Handclap: right-moving red + left-moving blue, adjacent lanes (|Δx| ≤ 1)
     {
       const rd = reds.filter(n => n.direction !== 8);
       const bd = blues.filter(n => n.direction !== 8);
@@ -223,7 +233,9 @@ export function annotatePatterns(notes, bpm, meta = {}, obstacles = [], bombs = 
         if (found) break;
         if (RIGHT_DIRS.has(r.direction)) {
           for (const b of bd) {
-            if (LEFT_DIRS.has(b.direction)) { add('handclap', beat, [r, b]); found = true; break; }
+            if (LEFT_DIRS.has(b.direction) && Math.abs(r.x - b.x) <= 1) {
+              add('handclap', beat, [r, b]); found = true; break;
+            }
           }
         }
       }
@@ -266,21 +278,25 @@ export function annotatePatterns(notes, bpm, meta = {}, obstacles = [], bombs = 
     if (n.y === 2)               add('top_row_note', n.beat, [n]);
   }
 
-  // ── Inline: alternating colors at same (x,y) within 0.5 beats ────────────
+  // ── Inline: alternating colors at same (x,y) within 0.5 beats, with parity ─
   for (let i = 1; i < N; i++) {
     const p = notes[i - 1], n = notes[i];
-    if (n.color !== p.color && n.x === p.x && n.y === p.y &&
-        n.beat - p.beat > 0 && n.beat - p.beat <= 0.5)
-      add('inline', p.beat, [p, n]);
+    if (!(n.color !== p.color && n.x === p.x && n.y === p.y &&
+          n.beat - p.beat > 0 && n.beat - p.beat <= 0.5)) continue;
+    // Parity: if both have directions, they must be in opposite families
+    if (p.direction !== 8 && n.direction !== 8) {
+      if (UP_DIRS.has(p.direction) === UP_DIRS.has(n.direction)) continue;
+    }
+    add('inline', p.beat, [p, n]);
   }
 
-  // ── Vision blocks: face note with a follower 1/16..0.5 beats later ────────
-  for (let i = 0; i < N; i++) {
-    if (notes[i].x !== 1 && notes[i].x !== 2) continue;
-    for (let j = i + 1; j < N; j++) {
-      const gap = notes[j].beat - notes[i].beat;
+  // ── Vision blocks: stack/tower hiding a following note in same/adjacent lane ─
+  for (const { beat: sb, lane: sl } of stacksForVb) {
+    for (let j = 0; j < N; j++) {
+      const gap = notes[j].beat - sb;
+      if (gap <= 0.0624) continue;
       if (gap > 0.5) break;
-      if (gap >= 0.0625) { add('vision_block', notes[i].beat, [notes[i], notes[j]]); break; }
+      if (Math.abs(notes[j].x - sl) <= 1) { add('vision_block', sb, [notes[j]]); break; }
     }
   }
 
@@ -433,13 +449,13 @@ export function annotatePatterns(notes, bpm, meta = {}, obstacles = [], bombs = 
         add('paul', p.beat, [p, n]);
     }
 
-    // Hook: same-hand non-dot within 1 beat, both up or both down, lane+layer change
+    // Hook: direction reversal (down→up or up→down), same layer, adjacent lanes
     for (let i = 1; i < dh.length; i++) {
       const p = dh[i - 1], n = dh[i];
       if (n.beat - p.beat > 1.0) continue;
-      const bothUp   = UP_DIRS.has(p.direction)   && UP_DIRS.has(n.direction);
-      const bothDown = DOWN_DIRS.has(p.direction) && DOWN_DIRS.has(n.direction);
-      if ((bothUp || bothDown) && Math.abs(n.x - p.x) >= 1 && Math.abs(n.y - p.y) >= 1)
+      const reversal = (DOWN_DIRS.has(p.direction) && UP_DIRS.has(n.direction)) ||
+                       (UP_DIRS.has(p.direction)   && DOWN_DIRS.has(n.direction));
+      if (reversal && Math.abs(n.x - p.x) <= 1 && n.y === p.y)
         add('hook', p.beat, [p, n]);
     }
 

@@ -72,7 +72,7 @@ Gradient Boosting 5-fold CV: **84.12% ± 1.77%**
 
 ---
 
-## Models — Optuna-tuned ← current best
+## Models — Optuna-tuned (263-feature merged set)
 
 Same 263-feature dataset, hyperparameters optimised with Optuna TPE sampler, objective = 5-fold CV F1 (weighted). All tuned models saved to `models/tuned/`.
 
@@ -83,55 +83,51 @@ Same 263-feature dataset, hyperparameters optimised with Optuna TPE sampler, obj
 | Random Forest | 100 | 85.03% | 73.39% | 73.33% |
 | Gradient Boosting | 100 | 83.99% | 75.23% | 74.99% |
 
-**Best params (XGBoost):** `n_estimators=774, max_depth=6, learning_rate=0.283, subsample=0.999, colsample_bytree=0.992, min_child_weight=7, gamma=0.182, reg_alpha=0.949, reg_lambda=1.192`
+---
 
-**Best params (LightGBM):** `n_estimators=437, max_depth=3, num_leaves=61, learning_rate=0.138, subsample=0.564, colsample_bytree=0.488, min_child_samples=10, reg_alpha=1.898, reg_lambda=0.548`
+## JS pattern-only classifier ← current best (exported to ONNX)
 
-Per-class breakdown (XGBoost, test set, n=95):
+Trained exclusively on note-level features computable from the `.dat` file — no BeatSaver metadata API required. Single source of truth: `js/lib/src/patterns.js` drives both the browser overlay and the training pipeline.
+
+### Feature set (103 features)
+
+**Statistical:** lane/layer histograms, direction histograms, eBPM per hand (mean/median/max/p90), timing CV, rotation mean, hand balance, double rate, crossover rate, DD rate, arc density, wall density, note density.
+
+**Pattern counts + rates** (via `annotatePatterns()`): double, scissor, handclap, crossover\_scissor, stack, tower, loloppe, window, invert, vision\_block, dd, jump, inline, flick, triangle, hook, scoop, shrado, staircase, gallop, groove\_wall, bomb\_reset, stream (runs/notes/longest), vibro\_notes, jump\_stream (runs/notes).
+
+### Training
+
+- 493 maps, GradientBoosting, Optuna TPE (100 trials)
+- Sample weights: balanced inverse-frequency + Extreme class boosted (Tech-side eBPM < mean → 4×, Speed-side → 2.5×), reflecting the Tier 4 Speed / Tier 4 Tech split
+- `ccp_alpha = 0.0039` (post-pruning) — reduced model from ~1.9 MB → **178 KB**
+
+**Best params:** `n_estimators=676, max_depth=3, learning_rate=0.0354, subsample=0.878, min_samples_split=13, min_samples_leaf=9, max_features=sqrt, ccp_alpha=0.00391`
+
+### Results
+
+5-fold CV F1: **84.57% ± 3.70%**
+
+Per-class (hold-out test set, n=99):
 
 | Category | Precision | Recall | F1 | Support |
 |----------|-----------|--------|----|---------|
-| Accuracy | 90.0% | 100.0% | 94.7% | 18 |
-| Speed | 86.4% | 95.0% | 90.5% | 20 |
-| Tech | 84.6% | 75.9% | 80.0% | 29 |
-| Standard | 81.8% | 60.0% | 69.2% | 15 |
-| **Extreme** | **56.3%** | **69.2%** | **62.1%** | 13 |
+| Accuracy | 100.0% | 100.0% | **100.0%** | 18 |
+| Speed | 100.0% | 90.5% | **95.0%** | 21 |
+| Standard | 81.2% | 86.7% | **83.9%** | 15 |
+| Tech | 95.5% | 72.4% | **82.4%** | 29 |
+| **Extreme** | **62.5%** | **93.8%** | **75.0%** | 16 |
 
-Per-class breakdown (LightGBM, test set, n=95):
-
-| Category | Precision | Recall | F1 | Support |
-|----------|-----------|--------|----|---------|
-| Accuracy | 85.7% | 100.0% | 92.3% | 18 |
-| Speed | 86.4% | 95.0% | 90.5% | 20 |
-| Standard | 84.6% | 73.3% | 78.6% | 15 |
-| Tech | 87.0% | 69.0% | 76.9% | 29 |
-| **Extreme** | **56.3%** | **69.2%** | **62.1%** | 13 |
-
-Extreme remains the hardest class — it straddles Speed (high eBPM) and Tech (crossovers, parity breaks) simultaneously.
+Extreme recall improved significantly (56% → 94%) via eBPM-split weighting; precision trade-off is expected given the structural overlap with Speed and Tech.
 
 ---
 
-## Exported LightGBM (pattern features only, for JS inference)
+## Pattern Features
 
-Trained on 202 pattern + windowed features, fit on all 493 maps.
+Note-level features extracted from actual `.dat` beatmap files via the JS annotator (`patterns.js`), which is the single source of truth for all pattern detection logic.
 
-| Metric | Before windowed | After windowed |
-|--------|----------------|----------------|
-| Hold-out accuracy | 85.14% | **83.78%** |
-| Hold-out F1 | 84.86% | **83.31%** |
-| 5-fold CV F1 | 81.42% ± 3.55% | **80.79% ± 2.29%** |
+**Slot-based:** double, scissor, handclap, crossover\_scissor, stack, tower, loloppe, window
 
-Hold-out accuracy is slightly lower but CV variance tightened (±3.55% → ±2.29%). The hold-out split accounts for this variability.
-
----
-
-## Pattern Features (map_parser.py)
-
-Note-level features extracted from actual `.dat` beatmap files. 130 named pattern counts and rates across 39 pattern types, plus 72 windowed features:
-
-**Slot-based:** double, scissor, handclap, crossover, crossover\_scissor, stack, tower, loloppe, window, flower, quad
-
-**Per-note:** invert, face\_note, dot\_note, vision\_block, arc, chain
+**Per-note:** invert, vision\_block, dot\_note, top\_row\_note, crossover
 
 **Sequential (per-hand):** dd, jump, inline, flick, hook, scoop, shrado, staircase, arm\_circle, triangle, paul, dot\_spam
 
@@ -141,19 +137,16 @@ Note-level features extracted from actual `.dat` beatmap files. 130 named patter
 
 **Bomb:** bomb\_reset, bomb\_hold, hammer\_hit
 
-Plus statistical features: lane/layer histograms, direction histograms, eBPM per hand, timing CV, rotation, arc/chain rates, wall density.
-
-**Windowed features (72):** 16-beat window aggregates — max/mean/std/p90/p10/peak\_ratio for note density, crossover rate, double rate, DD rate, stream rate, vibro rate, peak eBPM, jump rate, loloppe rate, top-row rate, hand imbalance, wall density. `peak_ratio = max / mean` captures how bursty vs sustained each metric is.
+Plus statistical features: lane/layer histograms, direction histograms, eBPM per hand, timing CV, rotation, arc rates, wall density.
 
 ---
 
 ## Key Findings
 
-- **XGBoost and LightGBM tied at 87.97% CV F1** after Optuna tuning (150 trials each) — boosting methods outperform ensemble trees on this dataset at 263 features.
-- **Windowed features unlocked Extreme**: adding 16-beat window aggregates was the single biggest per-class gain for Extreme, which previously straddles Speed and Tech signal.
-- **Linear models caught up**: Logistic Regression went from 77.9% → 82.1% with windowed features, confirming they carry strong linear signal.
-- **39 pattern detectors**: expanding from 10 pushed merged accuracy from 82% → 84% (+2pp).
-- **Full progression**: 64.3% (metadata only) → 86.5% (10 patterns) → 84.6% (39 patterns + windowed, untuned) → **87.97%** (Optuna-tuned XGBoost/LightGBM).
-- **Accuracy and Speed are cleanest**: 90–95% F1 — rbRatio and eBPM signals are unambiguous.
-- **Extreme is still hardest**: ~62% F1 — high overlap with both Speed (dense notes) and Tech (crossovers, walls).
-- **Standard is the second hardest**: 69–79% F1 — acts as a catch-all for maps that don't strongly exhibit any single category's signal.
+- **Unified JS pipeline**: `patterns.js` is the single source of truth — the same annotator runs in the browser overlay and generates training features, eliminating drift between inference and training.
+- **eBPM dominates**: `ebpm_left_mean` and `ebpm_right_mean` together account for ~10% of feature importance — the single strongest signal for Speed vs everything else.
+- **Extreme is structurally bimodal**: Tier 4 Speed (>400 BPM) looks like Speed; Tier 4 Tech looks like Tech. eBPM-split sample weighting (4× for Tech-side, 2.5× for Speed-side) raised Extreme recall from 56% → 94%.
+- **Model size**: `ccp_alpha` pruning cut the ONNX model from 1.9 MB to 178 KB with no meaningful accuracy loss.
+- **Full CV F1 progression**: 64.3% (metadata only) → 82.97% (JS pattern pipeline, untuned) → 84.03% (+ Extreme weighting) → **84.57%** (+ Optuna tuning, 100 trials).
+- **Accuracy and Speed are cleanest**: near-perfect F1 — arc/chain rates and eBPM signals are unambiguous.
+- **Standard is the second hardest**: 83.9% F1 — acts as a catch-all for maps that don't strongly exhibit any single category's signal.

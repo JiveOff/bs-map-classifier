@@ -37,9 +37,9 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 DROP_COLS = ['category', 'map_id', 'key', 'map_name', 'hash',
-             'upload_date', 'last_update_date', 'uploader_id', 'difficulty', 'map_key']
+             'upload_date', 'last_update_date', 'uploader_id', 'difficulty',
+             'map_key', 'n_notes_parsed']
 
-CV      = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
 SEED    = 42
 OUT_DIR = Path('models/tuned')
 
@@ -71,96 +71,77 @@ def load_data(csv_path: Path):
     return X_train_sc, X_test_sc, y_train, y_test, le, imputer, scaler, list(X.columns)
 
 
+# ── eBPM-split sample weights (mirrors export_onnx.py) ───────────────────────
+
+def make_weights(y_train: np.ndarray, X_train: np.ndarray,
+                 le: LabelEncoder, feature_names: list) -> np.ndarray:
+    """Balanced weights + eBPM-split boost for Extreme (Tech-side 4×, Speed-side 2.5×)."""
+    from sklearn.utils.class_weight import compute_sample_weight
+    w = compute_sample_weight('balanced', y_train).astype(float)
+    ext_idx  = list(le.classes_).index('Extreme')
+    ext_mask = y_train == ext_idx
+    ebpm_col = feature_names.index('ebpm_left_mean')
+    ebpm     = X_train[ext_mask, ebpm_col]
+    idx      = np.where(ext_mask)[0]
+    w[idx[ebpm <  0]] *= 4.0   # Tech-side Extreme (standardised eBPM below mean)
+    w[idx[ebpm >= 0]] *= 2.5   # Speed-side Extreme
+    return w
+
+
+def _cv_f1_weighted(model_cls, params: dict, X: np.ndarray, y: np.ndarray,
+                    le: LabelEncoder, feature_names: list) -> float:
+    """5-fold CV with per-fold eBPM-split sample weights."""
+    cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=SEED)
+    scores = []
+    for tr, te in cv.split(X, y):
+        w = make_weights(y[tr], X[tr], le, feature_names)
+        m = model_cls(**params)
+        m.fit(X[tr], y[tr], sample_weight=w)
+        scores.append(f1_score(y[te], m.predict(X[te]), average='weighted'))
+    return float(np.mean(scores))
+
+
 # ── Objective functions ───────────────────────────────────────────────────────
 
-def _cv_f1(model, X, y) -> float:
-    scores = cross_val_score(model, X, y, cv=CV, scoring='f1_weighted', n_jobs=-1)
-    return float(scores.mean())
-
-
-def objective_xgboost(trial, X, y):
+def objective_gb(trial, X, y, le, feature_names):
+    """GradientBoosting — skl2onnx-exportable, with eBPM-split weights.
+    Search space centred around current best: n_est=500, depth=4, lr=0.04."""
     params = {
-        'n_estimators':      trial.suggest_int('n_estimators', 100, 800),
-        'max_depth':         trial.suggest_int('max_depth', 3, 8),
-        'learning_rate':     trial.suggest_float('learning_rate', 0.01, 0.3, log=True),
-        'subsample':         trial.suggest_float('subsample', 0.5, 1.0),
-        'colsample_bytree':  trial.suggest_float('colsample_bytree', 0.4, 1.0),
-        'min_child_weight':  trial.suggest_int('min_child_weight', 1, 10),
-        'gamma':             trial.suggest_float('gamma', 0.0, 1.0),
-        'reg_alpha':         trial.suggest_float('reg_alpha', 0.0, 2.0),
-        'reg_lambda':        trial.suggest_float('reg_lambda', 0.0, 2.0),
-        'random_state': SEED, 'n_jobs': -1, 'eval_metric': 'mlogloss', 'verbosity': 0,
-    }
-    return _cv_f1(XGBClassifier(**params), X, y)
-
-
-def objective_lgbm(trial, X, y):
-    params = {
-        'n_estimators':      trial.suggest_int('n_estimators', 100, 800),
-        'max_depth':         trial.suggest_int('max_depth', 3, 8),
-        'num_leaves':        trial.suggest_int('num_leaves', 15, 127),
-        'learning_rate':     trial.suggest_float('learning_rate', 0.01, 0.3, log=True),
-        'subsample':         trial.suggest_float('subsample', 0.5, 1.0),
-        'colsample_bytree':  trial.suggest_float('colsample_bytree', 0.4, 1.0),
-        'min_child_samples': trial.suggest_int('min_child_samples', 5, 50),
-        'reg_alpha':         trial.suggest_float('reg_alpha', 0.0, 2.0),
-        'reg_lambda':        trial.suggest_float('reg_lambda', 0.0, 2.0),
-        'class_weight': 'balanced',
-        'random_state': SEED, 'n_jobs': -1, 'verbose': -1,
-    }
-    return _cv_f1(LGBMClassifier(**params), X, y)
-
-
-def objective_gb(trial, X, y):
-    params = {
-        'n_estimators':    trial.suggest_int('n_estimators', 100, 600),
-        'max_depth':       trial.suggest_int('max_depth', 2, 6),
-        'learning_rate':   trial.suggest_float('learning_rate', 0.01, 0.2, log=True),
-        'subsample':       trial.suggest_float('subsample', 0.5, 1.0),
-        'min_samples_split': trial.suggest_int('min_samples_split', 2, 30),
-        'min_samples_leaf':  trial.suggest_int('min_samples_leaf', 1, 15),
-        'max_features':    trial.suggest_categorical('max_features', ['sqrt', 'log2', None]),
-        'random_state': SEED,
-    }
-    return _cv_f1(GradientBoostingClassifier(**params), X, y)
-
-
-def objective_rf(trial, X, y):
-    params = {
-        'n_estimators':    trial.suggest_int('n_estimators', 100, 800),
-        'max_depth':       trial.suggest_categorical('max_depth', [None, 10, 15, 20, 30]),
+        'n_estimators':      trial.suggest_int('n_estimators', 200, 1000),
+        'max_depth':         trial.suggest_int('max_depth', 3, 6),
+        'learning_rate':     trial.suggest_float('learning_rate', 0.01, 0.15, log=True),
+        'subsample':         trial.suggest_float('subsample', 0.6, 1.0),
         'min_samples_split': trial.suggest_int('min_samples_split', 2, 20),
         'min_samples_leaf':  trial.suggest_int('min_samples_leaf', 1, 10),
-        'max_features':    trial.suggest_categorical('max_features', ['sqrt', 'log2']),
-        'class_weight': 'balanced',
-        'random_state': SEED, 'n_jobs': -1,
+        'max_features':      trial.suggest_categorical('max_features', ['sqrt', 'log2', None]),
+        'ccp_alpha':         trial.suggest_float('ccp_alpha', 0.0, 0.005),
+        'random_state': SEED,
     }
-    return _cv_f1(RandomForestClassifier(**params), X, y)
+    return _cv_f1_weighted(GradientBoostingClassifier, params, X, y, le, feature_names)
 
 
 OBJECTIVES = {
-    'xgboost':          (objective_xgboost,          XGBClassifier),
-    'lgbm':             (objective_lgbm,              LGBMClassifier),
-    'gradient_boosting': (objective_gb,               GradientBoostingClassifier),
-    'random_forest':    (objective_rf,                RandomForestClassifier),
+    'gradient_boosting': (objective_gb, GradientBoostingClassifier),
 }
 
 
 # ── Tuning runner ─────────────────────────────────────────────────────────────
 
 def tune_model(name: str, X_train, X_test, y_train, y_test,
-               le: LabelEncoder, n_trials: int) -> dict:
+               le: LabelEncoder, feature_names: list, n_trials: int) -> dict:
     logger.info(f"\n{'='*60}\nTuning: {name}  ({n_trials} trials)\n{'='*60}")
 
     obj_fn, model_cls = OBJECTIVES[name]
+    X_tr = X_train.values
+    X_te = X_test.values
 
     study = optuna.create_study(
         direction='maximize',
         sampler=optuna.samplers.TPESampler(seed=SEED),
-        pruner=optuna.pruners.MedianPruner(n_startup_trials=10, n_warmup_steps=5),
+        pruner=optuna.pruners.MedianPruner(n_startup_trials=15, n_warmup_steps=5),
     )
     study.optimize(
-        lambda t: obj_fn(t, X_train, y_train),
+        lambda t: obj_fn(t, X_tr, y_train, le, feature_names),
         n_trials=n_trials,
         show_progress_bar=True,
     )
@@ -170,25 +151,16 @@ def tune_model(name: str, X_train, X_test, y_train, y_test,
     logger.info(f"  Best CV F1:  {best_cv_f1:.4f}")
     logger.info(f"  Best params: {best_params}")
 
-    # Retrain on full training set with best params
-    extra = {}
-    if name == 'xgboost':
-        extra = {'random_state': SEED, 'n_jobs': -1, 'eval_metric': 'mlogloss', 'verbosity': 0}
-    elif name == 'lgbm':
-        extra = {'class_weight': 'balanced', 'random_state': SEED, 'n_jobs': -1, 'verbose': -1}
-    elif name == 'gradient_boosting':
-        extra = {'random_state': SEED}
-    elif name == 'random_forest':
-        extra = {'class_weight': 'balanced', 'random_state': SEED, 'n_jobs': -1}
-
-    model = model_cls(**{**best_params, **extra})
-    model.fit(X_train, y_train)
+    # Retrain on full training set with eBPM-split weights + best params
+    w = make_weights(y_train, X_tr, le, feature_names)
+    model = model_cls(**{**best_params, 'random_state': SEED})
+    model.fit(X_tr, y_train, sample_weight=w)
 
     # Evaluate on hold-out test set
-    y_pred  = model.predict(X_test)
-    acc     = accuracy_score(y_test, y_pred)
-    f1      = f1_score(y_test, y_pred, average='weighted')
-    report  = classification_report(
+    y_pred = model.predict(X_te)
+    acc    = accuracy_score(y_test, y_pred)
+    f1     = f1_score(y_test, y_pred, average='weighted')
+    report = classification_report(
         le.inverse_transform(y_test),
         le.inverse_transform(y_pred),
         output_dict=True,
@@ -201,7 +173,6 @@ def tune_model(name: str, X_train, X_test, y_train, y_test,
                     f"R={r.get('recall',0):.1%}  F1={r.get('f1-score',0):.1%}  "
                     f"n={int(r.get('support',0))}")
 
-    # Save model and results
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     joblib.dump(model, OUT_DIR / f'{name}.pkl')
 
@@ -215,7 +186,6 @@ def tune_model(name: str, X_train, X_test, y_train, y_test,
         'n_trials':     n_trials,
     }
     (OUT_DIR / f'{name}_result.json').write_text(json.dumps(result, indent=2))
-
     return result
 
 
@@ -223,10 +193,9 @@ def tune_model(name: str, X_train, X_test, y_train, y_test,
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--features', default='data/processed/features_merged.csv')
-    parser.add_argument('--models', nargs='+',
-                        default=['xgboost', 'lgbm', 'gradient_boosting', 'random_forest'])
-    parser.add_argument('--trials', type=int, default=150)
+    parser.add_argument('--features', default='data/processed/js_features.csv')
+    parser.add_argument('--models', nargs='+', default=['gradient_boosting'])
+    parser.add_argument('--trials', type=int, default=200)
     args = parser.parse_args()
 
     logger.info(f"Loading features from {args.features}")
@@ -239,21 +208,15 @@ def main():
         if name not in OBJECTIVES:
             logger.warning(f"Unknown model '{name}', skipping")
             continue
-        r = tune_model(name, X_train, X_test, y_train, y_test, le, args.trials)
+        r = tune_model(name, X_train, X_test, y_train, y_test, le, cols, args.trials)
         results.append(r)
 
-    # Final leaderboard
     results.sort(key=lambda r: r['best_cv_f1'], reverse=True)
-    logger.info(f"\n{'='*60}\nLeaderboard (ranked by CV F1)\n{'='*60}")
-    logger.info(f"{'Model':<22} {'CV F1':>9} {'Test Acc':>10} {'Test F1':>9}")
-    logger.info('-' * 54)
+    logger.info(f"\n{'='*60}\nLeaderboard\n{'='*60}")
     for r in results:
-        logger.info(f"{r['model']:<22} {r['best_cv_f1']:>9.4f} "
-                    f"{r['test_accuracy']:>10.4f} {r['test_f1']:>9.4f}")
-
-    best = results[0]
-    logger.info(f"\nWinner: {best['model']}  CV F1={best['best_cv_f1']:.4f}  "
-                f"Test={best['test_accuracy']:.4f}")
+        logger.info(f"  {r['model']:<22} CV F1={r['best_cv_f1']:.4f}  "
+                    f"Test={r['test_accuracy']:.4f}  Test F1={r['test_f1']:.4f}")
+    logger.info(f"\nBest params: {results[0]['best_params']}")
 
 
 if __name__ == '__main__':

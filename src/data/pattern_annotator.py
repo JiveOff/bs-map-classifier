@@ -11,6 +11,7 @@ object type) are omitted; all 44 named patterns from docs/patterns/ that
 can be detected from note data are implemented here.
 """
 
+import bisect
 import json
 import math
 from collections import defaultdict
@@ -192,6 +193,8 @@ def annotate_patterns(
     right_notes = [n for n in notes_s if n.color == 1]
 
     # ── 1. SLOT-BASED PATTERNS ────────────────────────────────────────────
+    stacks_for_vb: list = []  # (beat, lane) collected for vision_block pass
+
     for _, grp in sorted(slots.items()):
         beat = min(n.beat for n in grp)
         reds  = [n for n in grp if n.color == 0]
@@ -199,7 +202,7 @@ def annotate_patterns(
         rd    = [n for n in reds  if n.direction != 8]
         bd    = [n for n in blues if n.direction != 8]
 
-        # Stacks / Towers / Windows / Flowers (same-color groups)
+        # Stacks / Towers / Flowers (same-color groups)
         for color in (0, 1):
             hand = [n for n in grp if n.color == color]
             if len(hand) < 2:
@@ -209,25 +212,36 @@ def annotate_patterns(
             for n in hand:
                 by_lane[n.x].append(n)
 
-            for lane_notes in by_lane.values():
+            for lane, lane_notes in by_lane.items():
                 if len(lane_notes) >= 3:
                     add("tower", beat, lane_notes)
+                    stacks_for_vb.append((beat, lane))
                 elif len(lane_notes) == 2:
-                    ys = sorted(n.y for n in lane_notes)
-                    if ys[1] - ys[0] >= 2:
-                        add("window", beat, lane_notes)
-                    else:
-                        add("stack", beat, lane_notes)
+                    add("stack", beat, lane_notes)
+                    stacks_for_vb.append((beat, lane))
 
-            # Flower: ≥3 same-color notes in the slot with ≥2 distinct directions
-            if len(hand) >= 3:
-                dirs = {n.direction for n in hand if n.direction != 8}
-                if len(dirs) >= 2:
-                    add("flower", beat, hand)
+            # Flower: ≥2 same-color notes at same (x,y) with different directions ≤90° apart
+            by_pos: Dict = defaultdict(list)
+            for n in hand:
+                by_pos[(n.x, n.y)].append(n)
+            for pos_notes in by_pos.values():
+                dir_pos = [n for n in pos_notes if n.direction != 8]
+                if len(dir_pos) >= 2:
+                    for pi in range(len(dir_pos)):
+                        for pj in range(pi + 1, len(dir_pos)):
+                            a, b_n = dir_pos[pi], dir_pos[pj]
+                            if _angle_diff(_DIR_ANGLES[a.direction],
+                                           _DIR_ANGLES[b_n.direction]) <= 90:
+                                add("flower", beat, [a, b_n])
 
             # Quad: ≥4 same-color notes spanning all 4 lanes
             if len(hand) >= 4 and len({n.x for n in hand}) == 4:
                 add("quad", beat, hand)
+
+        # Window: any note at y=0 AND y=2 with no note at y=1 in the slot
+        all_ys = {n.y for n in grp}
+        if 0 in all_ys and 2 in all_ys and 1 not in all_ys:
+            add("window", beat, grp)
 
         # Loloppe: same-color, same-direction, adjacent-lane pair
         for color in (0, 1):
@@ -254,10 +268,11 @@ def annotate_patterns(
             add("crossover_scissor", beat, [rc[0], bc[0]])
             continue
 
-        # Handclap: red rightward + blue leftward (both pointing inward)
+        # Handclap: red rightward + blue leftward, notes adjacent (|Δx| ≤ 1)
         for r in rd:
             for b in bd:
-                if r.direction in _RIGHT_DIRS and b.direction in _LEFT_DIRS:
+                if (r.direction in _RIGHT_DIRS and b.direction in _LEFT_DIRS
+                        and abs(r.x - b.x) <= 1):
                     add("handclap", beat, [r, b])
                     break
             else:
@@ -296,16 +311,14 @@ def annotate_patterns(
         if n.direction == 8:
             add("dot_note", n.beat, [n])
 
-    # Vision block: face note followed by another note within 0.5 beats
-    for i, n in enumerate(notes_s):
-        if n.x not in (1, 2):
-            continue
-        for j in range(i + 1, n_notes):
-            gap = notes_s[j].beat - n.beat
-            if gap > 0.5:
-                break
-            if gap >= 0.0625:
-                add("vision_block", n.beat, [n, notes_s[j]])
+    # Vision block: stack/tower hiding a following note in same/adjacent lane
+    _note_beats = [n.beat for n in notes_s]
+    for stack_beat, stack_lane in stacks_for_vb:
+        lo = bisect.bisect_right(_note_beats, stack_beat + 0.0624)
+        hi = bisect.bisect_right(_note_beats, stack_beat + 0.5)
+        for k in range(lo, hi):
+            if abs(notes_s[k].x - stack_lane) <= 1:
+                add("vision_block", stack_beat, [notes_s[k]])
                 break
 
     # Arcs
@@ -360,15 +373,14 @@ def annotate_patterns(
                     0 < iv <= VIBRO_MAX_INTERVAL):
                 add("paul", hand_notes[i].beat, [hand_notes[i-1], hand_notes[i]])
 
-        # Hook: same-hand up/down sequence with both lane and layer change
+        # Hook: direction reversal (down→up or up→down), same layer, adjacent lanes
         for i in range(1, len(dir_notes)):
             prev, curr = dir_notes[i-1], dir_notes[i]
             if curr.beat - prev.beat > 1.0:
                 continue
-            both_up   = prev.direction in _UP_DIRS   and curr.direction in _UP_DIRS
-            both_down = prev.direction in _DOWN_DIRS and curr.direction in _DOWN_DIRS
-            if (both_up or both_down) and \
-               abs(curr.x - prev.x) >= 1 and abs(curr.y - prev.y) >= 1:
+            reversal = (prev.direction in _DOWN_DIRS and curr.direction in _UP_DIRS) or \
+                       (prev.direction in _UP_DIRS   and curr.direction in _DOWN_DIRS)
+            if reversal and abs(curr.x - prev.x) <= 1 and curr.y == prev.y:
                 add("hook", curr.beat, [prev, curr])
 
         # Scoop: lateral note → upward note
@@ -477,13 +489,18 @@ def annotate_patterns(
         if run_l >= 4:
             add("dot_spam", dot_h[run_s].beat, dot_h[run_s:], f"Dot Spam ×{run_l}")
 
-    # Inline: alternating-color consecutive notes at same (x, y)
+    # Inline: alternating-color consecutive notes at same (x, y) with parity
     for i in range(1, n_notes):
         prev, curr = notes_s[i-1], notes_s[i]
-        if (curr.color != prev.color and
+        if not (curr.color != prev.color and
                 curr.x == prev.x and curr.y == prev.y and
                 0 < curr.beat - prev.beat <= 0.5):
-            add("inline", curr.beat, [prev, curr])
+            continue
+        # Parity check: if both have directions, they must be in opposite families
+        if prev.direction != 8 and curr.direction != 8:
+            if (prev.direction in _UP_DIRS) == (curr.direction in _UP_DIRS):
+                continue
+        add("inline", curr.beat, [prev, curr])
 
     # ── 4. STREAM AND MULTI-NOTE PATTERNS ────────────────────────────────
 
@@ -624,7 +641,6 @@ def annotate_patterns(
     # ── 6. BOMB PATTERNS ─────────────────────────────────────────────────
 
     if bombs:
-        import bisect
         bombs_s = sorted(bombs, key=lambda b: b.beat)
         bomb_beats = [b.beat for b in bombs_s]
 

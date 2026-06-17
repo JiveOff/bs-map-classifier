@@ -15,6 +15,8 @@ Grid reference used throughout this document:
 **Category signal:** Arc-heavy maps signal Accuracy; arcs are uncommon in Speed/Tech
 
 ### What it looks like
+![Arc pattern](patterns/arc/arc.png)
+
 An arc is a curved, ribbon-like object that visually connects from one note's exit point, sweeps through space in a curve, and terminates. In the image the arc forms a tall arch shape starting from a down-arrow note at the bottom. The arc is a first-class object in v3/v4 format (`burstSliders` / arc JSON keys) and is distinct from a chain.
 
 ### Detection logic
@@ -37,6 +39,8 @@ Gap: `pattern_annotator.py` does not annotate individual arc occurrences for the
 **Category signal:** Tech, Extreme — indicates large, sweeping arm movements
 
 ### What it looks like
+![Arm circle pattern](patterns/arm_circle/circle.png)
+
 The arm_circle image shows a sequence of blue down-arrow notes with a green ellipse overlaid, indicating the circular path the arm travels. The notes progress through different lanes/layers such that successive swings require the arm to reposition perpendicular to the swing direction, tracing a circle. Typically involves vertical swings (up/down) paired with horizontal repositioning across lanes.
 
 ### Detection logic
@@ -59,6 +63,8 @@ Edge cases: crossover-heavy sections can look like arm circles; wrist rotation m
 **Category signal:** Tech, Extreme — deliberate use of bombs to constrain arm position
 
 ### What it looks like
+![Bomb hold pattern](patterns/bomb_hold/bombhold.png)
+
 The bomb_hold image shows a red note and a blue note far apart (outer lanes) at the same beat, followed by a dense corridor of bombs filling the central space in subsequent beats. The intent is to force the player to hold their sabers outward to avoid the bombs. The bombs are placed directly in the swing path the saber would travel after hitting the note.
 
 ### Detection logic
@@ -80,6 +86,8 @@ False-positive risk: dense bomb sections used for visual effect may trigger this
 **Category signal:** Tech — deliberate parity disruption using bombs
 
 ### What it looks like
+![Bomb reset pattern](patterns/bomb_reset/bombreset.jpg)
+
 The bomb_reset image shows two pairs of red+blue notes (one pair at the far ends, one pair closer together) with three bombs placed in a row between the two pairs. The bomb row is placed to force the player's arms to move through the bomb field, resetting their position. The notes before the bombs have a left-direction cut, the notes after have a left-direction cut as well — the bombs force a reset so the same direction can be hit again without a parity break.
 
 ### Detection logic
@@ -101,6 +109,8 @@ False-positive risk: decorative bombs placed near notes may trigger this. Additi
 **Category signal:** Tech, Extreme — forces large circular arm motion; rare but distinctive
 
 ### What it looks like
+![Bomb spiral pattern](patterns/bomb_spiral/bombspiral.jpg)
+
 The bomb_spiral image shows a large field of bombs arranged in a spiral/helical pattern spreading across the grid — bombs appear at alternating lanes and layers in a rotating sequence. There are no notes visible; the spiral is purely a bomb formation. The player must move their arms in a circular path to avoid all bombs.
 
 ### Detection logic
@@ -122,6 +132,8 @@ Counting: increment `n_bomb_spirals` per detected run. This is a map-level decor
 **Category signal:** Accuracy — chains are associated with tech-accuracy hybrid play
 
 ### What it looks like
+![Chain pattern](patterns/chain/chain.png)
+
 A chain (also called "burst slider" in v3) is a note with a head block (directional arrow) followed by a series of link dots that the player sweeps through in one continuous motion. The image shows a chain of blue note segments cascading diagonally — head arrow at top, followed by dot-like links below it.
 
 ### Detection logic
@@ -144,6 +156,8 @@ Gap: `pattern_annotator.py` does not annotate chain positions for the viewer.
 **Category signal:** Speed, Tech — a specific stream sub-type
 
 ### What it looks like
+![Croissant pattern](patterns/croissant/croissant-pattern.png)
+
 The croissant image shows two pairs of notes arranged in an X shape: a red note pointing right in a far lane and a blue note pointing right in the centre, then a red note pointing left in the centre and a blue note pointing left in a far lane. The path of the saber traces an X or croissant shape. From the glossary: "A stream pattern that has the player swing in the shape of an X."
 
 ### Detection logic
@@ -167,6 +181,8 @@ False-positive risk: any lateral movement in a stream may partially match; requi
 **Category signal:** Tech — signature Tech pattern
 
 ### What it looks like
+![Crossover pattern](patterns/crossover/crossover.png)
+
 The crossover image shows a blue note (right hand) placed in lane 0 or 1 (left side), and a red note (left hand) placed in lane 2 or 3 (right side). Each note is on the "wrong" side, forcing the corresponding arm to cross the body's midline. The stagger shows crossovers at different beats, not simultaneous.
 
 ### Detection logic
@@ -193,7 +209,9 @@ Improvements / gaps:
 **Category signal:** Tech — extreme Tech variant
 
 ### What it looks like
-The crossover_scissor image shows a blue note on the left side (lanes 0–1) pointing down and a red note on the right side (lanes 2–3) also pointing down — or both pointing in opposite directions that are nearly opposite (≥150° apart). Both notes are hit simultaneously and both hands are crossed. This is essentially a scissor where both notes are also on the wrong side.
+![Crossover scissor pattern](patterns/crossover_scissor/arm-tangle-alt.png)
+
+A crossover scissor is a scissor (two simultaneous notes with nearly opposite directions, ≥150° apart) where both hands are also crossed — blue note in the left lanes (0–1) and red note in the right lanes (2–3). For example: blue note at lane 1 pointing up (direction 0) and red note at lane 2 pointing down (direction 1), both at the same beat. The arms are tangled AND the directions clash.
 
 ### Detection logic
 Current implementation in `pattern_annotator.py` (lines 124–129):
@@ -224,6 +242,8 @@ Improvements: the `continue` causes crossover_scissor to skip scissor/double cla
 **Category signal:** Tech, Extreme — physical body engagement
 
 ### What it looks like
+![Crouch wall pattern](patterns/crouch_wall/crouch.jpg)
+
 The crouch_wall image shows a very wide, flat red wall that spans across all or most lanes but only occupies the top portion (y = top layer, approximately y ≥ 1.5 in obstacle height terms). The wall forces the player to duck under it.
 
 ### Detection logic
@@ -246,6 +266,8 @@ In practice, `map_parser.py` uses: `is_crouch = (obs.y + obs.h) > 1.5` (i.e., th
 **Category signal:** Tech, Extreme — physical body engagement
 
 ### What it looks like
+![Dodge wall pattern](patterns/dodge_wall/dodgewall.jpg) ![Face wall pattern](patterns/dodge_wall/facewall.jpg) ![Wall pattern](patterns/dodge_wall/wall.png)
+
 Three images show dodge walls. The dodge_wall.jpg shows a tall vertical wall occupying lanes 2–3 (right side), extending from floor to top, forcing the player to lean left. The facewall.jpg shows a similar wall in lanes 1–2 (center), which is also called a face wall (forces a dodge even from center). The wall.png shows a single-column-wide red wall in the rightmost lane.
 
 ### Detection logic
@@ -269,6 +291,8 @@ Face walls (center lanes 1–2) are a subtype that additionally create vision bl
 **Category signal:** Speed/Standard — dot-heavy maps allow faster streams; low dot rate signals Accuracy
 
 ### What it looks like
+![Dot note pattern](patterns/dot_note/bndot.png)
+
 A dot note (direction = 8) appears as a cube with a circular dot instead of an arrow. It can be hit from any direction. The bndot.png shows a single blue dot block.
 
 ### Detection logic
@@ -288,6 +312,8 @@ This is already fully implemented in `map_parser.py`. No edge cases.
 **Category signal:** Speed/Standard (when present, signals beginner/lower-quality mapping); note: this is a negative quality pattern
 
 ### What it looks like
+![Dot spam pattern](patterns/dot_spam/dotspam.png)
+
 The dot_spam image shows a long horizontal row of same-color dot notes all at the same layer, filling an entire lane row for multiple consecutive beats. It looks like a dense wall of blue dot cubes lined up in the same position for many beats.
 
 ### Detection logic
@@ -309,6 +335,8 @@ False-positive risk: intentional dot streams are valid; true dot_spam is specifi
 **Category signal:** Standard, Extreme — fundamental pattern in most maps
 
 ### What it looks like
+![Doubles pattern](patterns/double/doubles.jpg)
+
 The doubles image shows a red note (left, pointing down-left) and a blue note (right, pointing down-right) at the same beat. Both hands hit simultaneously. Two configurations are shown: outer lanes (0 and 3) and inner lanes (1 and 2).
 
 ### Detection logic
@@ -337,6 +365,8 @@ No improvements needed; the logic is clean.
 **Category signal:** Tech (DDs are the defining parity-break pattern); many DDs → Tech
 
 ### What it looks like
+![Double directional pattern](patterns/double_directional/double-directionals.jpg)
+
 The double-directionals image shows three blue down-arrow notes in sequence, with red arrows drawn between them indicating the same hand hits consecutive down-cuts. A wrist reset is required between each to avoid playing them as a double-directional.
 
 ### Detection logic
@@ -366,6 +396,8 @@ Improvements:
 **Category signal:** Tech, Extreme — also a readability risk
 
 ### What it looks like
+![Face note pattern](patterns/face_note/facenote.jpg)
+
 The face_note image shows a red note (up direction) and a blue note (up direction) both placed in the center two lanes (lanes 1 and 2) at middle layer (y=1) — exactly at face height. Two center notes pointing up appear side by side.
 
 ### Detection logic
@@ -389,6 +421,8 @@ No edge case issues — this is a pure position check.
 **Category signal:** Speed — rapid same-hand notes; also appears in Standard
 
 ### What it looks like
+![Flick pattern](patterns/flick/flick-alt.png)
+
 The flick image shows two red notes and two blue notes in rapid alternation (all pointing right), with the notes at slightly different layers. From the glossary: "A pattern of two or more notes of the same color, typically at 1/4 precision." A flick is essentially a very short same-hand burst requiring a quick wrist motion.
 
 ### Detection logic
@@ -412,19 +446,22 @@ False-positive risk: gallops (one fast + one slow) can overlap. Require that bot
 **Category signal:** Rare; decorative/accuracy hybrid
 
 ### What it looks like
-The flower image shows a single red note with 4 other red notes surrounding it at cardinal positions — forming a flower-like arrangement. From the glossary: "A combination of two or more notes that are different directions at the same time, creating a flower-like shape." This is essentially a multi-directional simultaneous note cluster of the same color.
+![Flower pattern](patterns/flower/flower.jpg)
+
+A flower is two notes of the same color placed at the same grid position (same x, same y) with different directions, such that one swing motion would naturally cover both hits. For example: a down (direction 1) and a down-left (direction 6) note at the exact same (x, y) cell — a single downward motion clips both. From the glossary: "A combination of two or more notes that are different directions at the same time, creating a flower-like shape."
+
+The image shows a central red note surrounded by gold/amber notes at cardinal positions — the gold notes represent the overlapping directional variants at the same grid cell (editor rendering artifact). In-game all notes at the same position of the same color are the flower.
 
 ### Detection logic
-A flower is a simultaneous multi-directional same-color cluster:
+A flower is a same-color, same-position, multi-direction cluster at the same beat:
 
-1. In a single timing slot (within 1/8 beat), find ≥ 3 notes of the same color.
-2. These notes must have at least 2 different directions (all-dot doesn't count as a flower).
-3. The directions should span ≥ 180° arc (e.g., up + down, or left + right, or multiple diagonal directions).
-4. A tower/stack is same direction; a flower is different directions at the same time.
+1. In a single timing slot (within 1/8 beat), find ≥ 2 notes of the same color at the same (x, y).
+2. These notes must have at least 2 different directions (same direction = just a stack, not a flower).
+3. The angle between directions should be small enough that a single swing covers both (≤ 90°, e.g., Down + DownLeft, or Right + UpRight).
 
-Alternatively, the strictest definition: ≥ 4 notes of the same color in one slot with ≥ 3 distinct directions arranged in a radial/flower pattern.
+A tower/stack is same direction, same position; a flower is different directions at the same position — one motion, multiple hit angles.
 
-False-positive risk: rarely appears in practice; stacks/towers may be confused if direction check is skipped.
+False-positive risk: rarely appears in practice; require same (x, y) and same beat to avoid confusing with adjacent-note patterns.
 
 ---
 
@@ -435,6 +472,8 @@ False-positive risk: rarely appears in practice; stacks/towers may be confused i
 **Category signal:** Standard, Extreme — rhythmic burst pattern
 
 ### What it looks like
+![Gallop pattern](patterns/gallop/gallop.png)
+
 The gallop image shows: far-left a small red note (right direction) and a small blue note (right direction), then in the centre two larger red and blue notes (down direction) — a rapid pair of singles followed by a double. From the glossary: "A rapid pattern of two single notes followed by a double." Timing is typically [short interval, short interval, longer gap] or two fast singles + a double.
 
 ### Detection logic
@@ -461,6 +500,8 @@ False-positive risk: any fast triple could match; require the third event to act
 **Category signal:** Tech, Extreme — wall + note combination demanding full-body movement
 
 ### What it looks like
+![Groove wall pattern](patterns/groove_wall/groovewall.jpg)
+
 The groove_wall image shows a single tall dodge wall (left-center lanes) alongside a blue note (right direction) in the right side. From the glossary: "A wall that is paired with a note that creates a motion involving both arms and body." The player must dodge the wall while simultaneously hitting the note.
 
 ### Detection logic
@@ -483,7 +524,9 @@ False-positive risk: any note near a wall qualifies; this is a broad pattern.
 **Category signal:** Extreme/Tech — a discouraged pattern; signals aggressive design
 
 ### What it looks like
-The hammer_hit image shows a blue note (right direction, middle layer) and a red note (down-left direction, bottom layer) near a wall, and immediately after each note (within the same beat) a cluster of bombs occupies the positions directly in the expected follow-through path. From the glossary: "A pattern composed of an arrow block pointing at a bomb, forcing the player to swing their saber at the arrow block but stopping short to avoid the bomb."
+![Hammer hit pattern](patterns/hammer_hit/hammer-hit-alt.png)
+
+The hammer_hit image shows a red note (down-left direction) and a blue note (down direction), each with bombs placed immediately in the follow-through path of the swing — directly where the saber would travel after cutting through the note. The player must swing to hit the note but stop the motion abruptly to avoid the bomb in the exit path. From the glossary: "A pattern composed of an arrow block pointing at a bomb, forcing the player to swing their saber at the arrow block but stopping short to avoid the bomb."
 
 ### Detection logic
 A hammer hit is a note with a bomb immediately in its cut-through path:
@@ -505,7 +548,9 @@ False-positive risk: bombs legitimately placed near notes for visual effect. Req
 **Category signal:** Standard/Extreme (discouraged pattern, signals aggressive/inconsiderate mapping)
 
 ### What it looks like
-The handclap image shows a red note (right direction, left side) and a blue note (left direction, right side) at the same beat — both notes point inward toward each other. Both hands are directed toward the centre simultaneously. Also visible is a red note (left direction) and a blue note (right direction) at the same beat in a later variation.
+![Handclap pattern](patterns/handclap/controller-smash-alt.png)
+
+A handclap is two notes in adjacent lanes at the same beat with clashing directions — both pointing toward each other. For example: a red note pointing right (direction 3) in lane 1 next to a blue note pointing left (direction 2) in lane 2, both at the same beat. The two sabers swing into each other's path simultaneously. The image shows multiple instances of this inward-clash configuration at different beats.
 
 ### Detection logic
 A handclap is: both hands are directed inward toward each other at the same beat.
@@ -529,6 +574,8 @@ Distinction from scissor: in a scissor, notes point AWAY from each other (outwar
 **Category signal:** Tech, Extreme — intentional hitbox exploitation; discouraged but used in tech/extreme
 
 ### What it looks like
+![Hitbox abuse pattern](patterns/hitbox_abuse/hitbox-abuse-alt.png)
+
 The hitbox_abuse image shows red and blue notes interleaved closely in lanes 1–2, with the positions clearly overlapping the effective hitbox zones of the opposite color notes. From the glossary: "Notes placed in the pre- or post-swing path of an opposite color note."
 
 ### Detection logic
@@ -554,21 +601,22 @@ False-positive risk: many coincidental placements qualify; this pattern is hard 
 **Category signal:** Standard, Tech — common intermediate pattern
 
 ### What it looks like
-The hook image shows two blue notes: one at the top row (y=2) and one at the bottom row (y=0), both at similar lanes, both with down arrows. The notes are sequentially hit with the same hand, moving from top to bottom. From the glossary: "A pattern of two sequential up/down blocks of the same color with usually one lane in between. The player's arm makes a hook motion."
+![Hook pattern](patterns/hook/hook.png)
+
+A hook is two sequential same-color notes at the same layer (y) in adjacent lanes, where the first note points down and the second note points up (or vice versa). For example: blue note at (x=3, y=0) pointing down, followed one beat later by blue note at (x=2, y=0) pointing up. The arm swings down, then hooks back upward in the adjacent lane — forming a U-shape motion. From the glossary: "A pattern of two sequential up/down blocks of the same color with usually one lane in between. The player's arm makes a hook motion."
 
 ### Detection logic
-A hook is a same-color two-note sequence with vertical repositioning:
+A hook is a same-color two-note sequence where the direction reverses (down→up or up→down) in an adjacent lane at the same layer:
 
 1. For consecutive same-color notes (i, i+1):
-2. Both must have direction 0 (Up) or 1 (Down) (or up/down diagonal variants: 4, 5 for up-diag; 6, 7 for down-diag).
-3. |x[i] - x[i+1]| ≥ 1 (at least 1 lane apart horizontally).
-4. |y[i] - y[i+1]| ≥ 1 (at least 1 layer apart vertically, typically y changes from 0 to 2 or vice versa).
-5. Interval ≤ 1.0 beats (close enough for the hook motion to be intended).
-6. The two notes have directions in the same "family" (both up or both down).
+2. Note i has direction Down (1 or down-diagonal 6, 7); note i+1 has direction Up (0 or up-diagonal 4, 5), OR vice versa — direction reversal.
+3. |x[i] - x[i+1]| ≤ 1 (same or adjacent lane).
+4. y[i] == y[i+1] (same layer — the hook stays at the same height).
+5. Interval ≤ 1.0 beats.
 
 Count each qualifying pair as one hook.
 
-False-positive risk: any two up-notes with lane difference ≥ 1 would qualify. The "hook" specifically involves the arm making a U/hook shape — require the y change to be ≥ 1 layer.
+False-positive risk: any down→up pair in adjacent lanes qualifies; require the interval to be ≤ 1 beat and the lane shift to be ≤ 1 to exclude coincidental reversals.
 
 ---
 
@@ -579,17 +627,18 @@ False-positive risk: any two up-notes with lane difference ≥ 1 would qualify. 
 **Category signal:** Tech — same-lane same-layer alternating, forces small precise wrist movement
 
 ### What it looks like
-The inline image shows three notes in sequence — red, blue, red — all in the exact same lane (x=1) and layer (y=0), hit in alternation. The notes are all down-arrows or similar, and they occupy the same grid position.
+![Inline pattern](patterns/inline/inline.png)
+
+An inline is a sequence of alternating-color notes all at the same (x, y) grid position, where each color maintains good parity (alternating directions). For example: blue down → red up → blue up → red down, all at (x=1, y=0). Each hand hits the same position repeatedly, with each hit reversing direction from its previous hit. The image shows notes appearing spread out (for readability) but they occupy the same grid cell at different beats.
 
 ### Detection logic
-Inline notes are two or more consecutive alternating-color notes in the same (x, y) position:
+Inline notes are two or more consecutive alternating-color notes in the same (x, y) position, each color maintaining parity:
 
 1. For consecutive pairs (i, i+1) where notes alternate color (color[i] ≠ color[i+1]):
 2. Check `x[i] == x[i+1]` AND `y[i] == y[i+1]` (same exact grid cell).
-3. Interval ≤ 0.5 beats (close enough to be an intentional inline).
-4. Count runs of ≥ 2 qualifying pairs as one inline occurrence.
-
-Inline can also be same-color (two of the same hand in the same position), but the standard definition is alternating colors.
+3. Interval ≤ 0.5 beats.
+4. Each color's consecutive notes should alternate direction (down→up or up→down per hand) — good parity within the inline.
+5. Count runs of ≥ 2 qualifying pairs as one inline occurrence.
 
 False-positive risk: notes that happen to share a position by coincidence. Require at least 2 consecutive inline pairs to count as an inline run.
 
@@ -602,7 +651,9 @@ False-positive risk: notes that happen to share a position by coincidence. Requi
 **Category signal:** Accuracy, Tech — forces large pre-swing and post-swing
 
 ### What it looks like
-The invert image shows a single red note on the left side and a single blue note pointing leftward (inward/toward center). From the glossary: "Blocks pointing inwards from the outside requiring a larger pre-swing to hit." An invert is a note on the outer lanes pointing toward the center, which requires the arm to first move outward (pre-swing) before swinging inward to hit.
+![Invert pattern](patterns/invert/invert.png)
+
+The invert image shows a red note on the left side pointing rightward (left-to-right, direction 3) and a blue note on the right side pointing leftward (right-to-left, direction 2). Both notes point inward toward the center of the grid — the opposite of the natural outward swing. From the glossary: "Blocks pointing inwards from the outside requiring a larger pre-swing to hit." An invert requires the arm to first extend outward (pre-swing) and then swing inward to cut the note correctly.
 
 ### Detection logic
 Current implementation (pattern_annotator.py lines 143–151):
@@ -637,6 +688,8 @@ Improvements: the current code counts every invert note individually, which may 
 **Category signal:** Speed, Extreme — large physical movement for one hand
 
 ### What it looks like
+![Jump pattern](patterns/jump/jump.jpg)
+
 The jump image shows two blue notes: one in the bottom-left area and one in the top-right area, for the same hand (color) — a single note that requires the arm to travel a large distance to reach the second note. From the glossary: "A pattern that moves across multiple columns horizontally or rows vertically in rapid succession."
 
 ### Detection logic
@@ -666,6 +719,8 @@ Improvements:
 **Category signal:** Speed, Extreme — combines stream density with jumps
 
 ### What it looks like
+![Jump stream pattern](patterns/jump_stream/jumpstream.jpg)
+
 The jump_stream image shows alternating red and blue notes in a regular stream pattern (1/4 beat intervals), but with pairs of notes at the same beat interspersed — mixing doubles and singles in the stream. From the glossary: "A pattern that includes jumps within a stream."
 
 ### Detection logic
@@ -690,6 +745,8 @@ False-positive risk: streams near doubles may partially match. Require the doubl
 **Category signal:** Tech, Extreme — hitbox abuse pattern named after mapper Loloppe
 
 ### What it looks like
+![Loloppe pattern](patterns/loloppe/loloppe.png)
+
 The loloppe image shows four notes in a row: two red notes side by side (lanes 0 and 1) with the same direction (down), followed by two blue notes side by side (lanes 2 and 3) with the same direction (down). All four are at the same beat (or very close), same direction, adjacent lanes. From the glossary: "Two same-direction blocks placed side-by-side such that hitting both blocks requires abusing the block hitbox."
 
 ### Detection logic
@@ -715,6 +772,8 @@ False-positive risk: any adjacent same-direction pair qualifies. This may be mor
 **Category signal:** N/A — this folder contains reference images for parity angles
 
 ### What it looks like
+![0° parity](patterns/parity_reference/0deg.png) ![45° parity](patterns/parity_reference/45deg.png) ![90° parity](patterns/parity_reference/90deg.png) ![135° parity](patterns/parity_reference/135deg.png) ![180° parity](patterns/parity_reference/180deg.png)
+
 Five images show the same two blue notes (sequential, same color) at different relative orientations: 0°, 45°, 90°, 135°, 180°. These illustrate the angle between consecutive note directions, used to understand parity and double-directional detection. At 0° both notes point the same way; at 180° they are opposite directions (correct parity flow).
 
 ### Detection logic
@@ -736,6 +795,8 @@ The `_angle_diff` function in `pattern_annotator.py` implements this. This folde
 **Category signal:** Tech — extreme accuracy challenge; rare
 
 ### What it looks like
+![Paul pattern](patterns/paul/paul.jpg)
+
 The paul image shows a single blue note with a very faint "ghost" cloud of repeated images around it at the same position, representing the same note hit many times in quick succession — or a blurred note that must be cut precisely. From the glossary: "A sequence of inline blocks of the same direction placed at very high precision. This forces the player to hit the sequence with a slow continuous swing."
 
 ### Detection logic
@@ -760,6 +821,8 @@ Count: `n_paul_runs`, `n_paul_notes`. Rate: `n_paul_notes / total_notes`.
 **Category signal:** Speed, Tech — horizontal movement during a stream
 
 ### What it looks like
+![Piano stream pattern](patterns/piano_stream/pianostream.png)
+
 The piano_stream image shows: red note (down), blue note (up), red note (down), blue note (up) — the notes alternate color, alternate direction, AND each note is in a different lane, progressing horizontally across the track like piano keys (left to right or right to left). From the glossary: "A sequence of alternating color and direction blocks that progresses horizontally across lanes on the track."
 
 ### Detection logic
@@ -783,6 +846,8 @@ False-positive risk: any stream with incrementing x positions qualifies, but tru
 **Category signal:** Extreme — 4-note same-color horizontal cluster
 
 ### What it looks like
+![Quad pattern](patterns/quad/quad.jpg)
+
 The quad image shows four blue notes in a row filling all four lanes (0, 1, 2, 3) at the same beat, all pointing left. A quad is four same-color notes across all lanes simultaneously. From the glossary: "A horizontal pattern of four horizontal blocks of the same color across the track."
 
 ### Detection logic
@@ -803,6 +868,8 @@ In `map_parser.py`, `n_quads` is counted in `count_patterns()`. The current impl
 **Category signal:** Accuracy, Tech — forces precise opposite-direction hits
 
 ### What it looks like
+![Scissor pattern](patterns/scissor/scissor-cucumber_example.png)
+
 The scissor image shows two configurations (OR): red note pointing up + blue note pointing down (or vice versa) at the same beat in their canonical lanes. From the glossary: "When a red and blue note are on the same timing, and are hit simultaneously in opposite directions." Also known as cucumber.
 
 ### Detection logic
@@ -831,6 +898,8 @@ Improvements: the current code handles the multiple-note case by checking any co
 **Category signal:** Standard, Accuracy — fluid scooping motion
 
 ### What it looks like
+![Scoop pattern](patterns/scoop/scoop_example.png)
+
 The scoop image shows a red note (right direction, bottom layer) followed by a blue note (up direction, bottom layer) — the hand moves right then curves upward. From the glossary: "A pattern where the player makes a scooping motion. Typically a left or right note followed by an up note in the bottom row."
 
 ### Detection logic
@@ -858,6 +927,8 @@ Count each qualifying two-note sequence as one scoop.
 **Category signal:** Tech, Extreme — accuracy problem pattern; named after mapper Shrado
 
 ### What it looks like
+![Shrado angle pattern](patterns/shrado_angle/shrado-angle.png)
+
 The shrado_angle image (three frames of the same pattern at different approach distances) shows a small blue note in the far lane (x=0 or x=3) with an outward diagonal-down direction, followed by a blue note in a closer lane pointing up. From the glossary: "A pattern consisting of an outward-facing diagonal down block in a far lane followed by an up block of the same color in a closer lane, spanning 3 lanes or more."
 
 ### Detection logic
@@ -882,6 +953,8 @@ Count each qualifying pair as one shrado_angle. Rate: `n_shrado_angles / total_n
 **Category signal:** Speed, Standard — common technique for note density; distinguishes Accuracy from Speed
 
 ### What it looks like
+![Sliders pattern](patterns/slider/sliders.png) ![Stagger pattern](patterns/slider/stagger.jpg)
+
 The sliders.png shows three blue notes in a vertical column: a down-arrow note at top, a dot note in the middle, and a dot note at bottom — these are hit in one downward sweep (a slider). The stagger.jpg shows three blue dot notes progressing diagonally at too-wide spacing to be hit in one motion (a stagger/mismap). A proper slider has notes close enough to sweep in one motion.
 
 ### Detection logic
@@ -905,7 +978,9 @@ In `map_parser.py`, sliders are detected as part of the arc/chain count using th
 **Category signal:** Standard, Extreme — increases swing speed requirement
 
 ### What it looks like
-The stacks image shows two sets of two notes each: on the left, two blue notes vertically stacked (same lane, layers 0 and 1, both pointing up); on the right, two more blue notes vertically stacked (both pointing down). A stack is exactly 2 same-color, same-lane, same-direction notes at the same beat.
+![Stacks pattern](patterns/stack/stacks.jpg)
+
+The stacks image shows two sets of two notes each: on the left, two blue notes vertically stacked (same lane, layers 0 and 1, both pointing up); on the right, two more blue notes vertically stacked (both pointing down). A stack is exactly 2 same-color, same-direction notes placed in a line at the same beat.
 
 ### Detection logic
 Current implementation (pattern_annotator.py lines 104–115):
@@ -925,9 +1000,9 @@ for color in (0, 1):
             add("stack", beat, col)
 ```
 
-A stack is exactly 2 same-color notes in the same lane (x) in the same timing slot (1/8 beat). ≥ 3 notes in the same lane is a tower.
+A stack is exactly 2 same-color notes in the same timing slot (1/8 beat). ≥ 3 notes in the same lane is a tower.
 
-Note: direction is NOT checked — two notes in the same lane regardless of direction are counted as a stack. The glossary says "same-direction" but the implementation allows any direction. This may over-count stacks where notes have opposing directions (which would be a window, not a stack).
+Note: direction is NOT checked in the current implementation — two notes in the same lane regardless of direction are counted as a stack. The glossary specifies "same-direction"; the implementation may over-count stacks where notes have opposing directions (which would be a window, not a stack).
 
 Improvement: add a direction check — if the two notes have the same direction, it's a pure stack. If they have different/opposing directions, it may be a window or a different pattern.
 
@@ -940,7 +1015,9 @@ Improvement: add a direction check — if the two notes have the same direction,
 **Category signal:** Standard, Tech — natural flow pattern with positional chaining
 
 ### What it looks like
-The staircase image (two panels) shows notes where each note's direction visually "points toward" the next note's position. For example, a blue note at bottom-left pointing right is followed by a blue note at bottom-right pointing right-up, which points toward the next note at middle-right, etc. Each note's direction indicates the path to the next note.
+![Staircase pattern](patterns/staircase/staircase.jpg)
+
+The staircase image (two panels) shows notes where each note's direction visually "points toward" the next note's position. For example, a blue note at bottom-left pointing right is followed by a blue note at bottom-right pointing right-up, which points toward the next note at middle-right, etc. Each note's direction indicates the path to the next note. **This pattern does not include blocks on the same beat.**
 
 ### Detection logic
 A staircase is a same-color sequence where each note's cut direction approximately points toward the next note's position:
@@ -963,6 +1040,8 @@ False-positive risk: any flow-oriented mapping will partially match. To be a tru
 **Category signal:** Speed — the defining pattern of Speed maps
 
 ### What it looks like
+![Stream pattern](patterns/stream/stream.png) ![Standard flow](patterns/stream/standard-flow.jpg) ![Lefty stream](patterns/stream/lefty-stream.jpg) ![Righty stream](patterns/stream/righty-stream.jpg)
+
 Multiple stream images show alternating red/blue notes in rapid succession. The stream.png shows a long alternating sequence with notes in slightly varying lanes but consistent timing. The standard-flow.jpg shows single red and blue notes alternating beat by beat. The lefty-stream and righty-stream images show streams where the starting hand is the left or right respectively — circled pair shows which hand leads.
 
 ### Detection logic
@@ -1002,6 +1081,8 @@ Improvements:
 **Category signal:** Extreme, Standard — 3-note vertical cluster
 
 ### What it looks like
+![Tower pattern](patterns/tower/tower.jpg)
+
 The tower image shows three red notes at the same lane (x=0) filling all three layers (y=0, 1, 2), all pointing up, on the same beat. On the right side, three blue notes similarly stacked all pointing down. From the glossary: "Three same-colored, same-direction blocks placed in a line on the same beat."
 
 ### Detection logic
@@ -1025,6 +1106,8 @@ Improvement: direction check — a tower should have all notes pointing the same
 **Category signal:** Tech — wrist reset pattern
 
 ### What it looks like
+![Triangle pattern](patterns/triangle/triangle.png) ![Right triangle pattern](patterns/triangle/right-triangle.jpg)
+
 The triangle.png shows a 4x3 grid diagram with blue notes connected by red lines forming a triangular path: one note top-center, one note middle-left, one note bottom-center, with lines connecting them in a triangle shape. The label reads "Over time at high precision." The right-triangle.jpg shows a similar arrangement but with a 90° angle in the path.
 
 From the glossary: "Three or more notes forming a triangle pattern with position and orientation, causing a wrist reset due to excessive rotation in one direction."
@@ -1056,6 +1139,8 @@ False-positive risk: any 3-note curve qualifies. Require minimum rotation accumu
 **Category signal:** Speed, Extreme — extremely fast streams requiring pure wrist motion
 
 ### What it looks like
+![Vibro stream pattern](patterns/vibro_stream/vibro.jpg)
+
 The vibro image shows a long side-by-side block of blue notes and red notes, all jammed together with almost no visible gaps — they are at 1/8 beat spacing or faster, so densely packed that the block looks solid. From the glossary: "An extremely high speed stream of a pace requiring small wrist motions to hit, typically at 1/8 precision."
 
 ### Detection logic
@@ -1079,19 +1164,20 @@ Note: vibro specifically applies to arrow notes; dot-note fast sequences are a d
 **Category signal:** Tech, Extreme — readability/difficulty amplifier
 
 ### What it looks like
-The vision_block image (vb_example.png) shows red and blue notes in the center lanes (x=1, x=2) at the middle layer, visually blocking the view of other notes behind them. A highlighted note (circled in red) is positioned right behind/above the blocking notes. From the glossary: "A sequence of notes, typically using the middle row, that block the player's vision of the following notes."
+![Vision block pattern](patterns/vision_block/vb_example.png)
+
+A vision block occurs when a vertical stack of notes (a tower or stack) hides the notes that come immediately after it. The image shows two vertical stacks — one red (left side, all three layers) and one blue (right side, all three layers) — and one beat later, two notes appear behind them that are very hard to see because the stacks fill the player's field of view. From the glossary: "A sequence of notes, typically using the middle row, that block the player's vision of the following notes."
 
 ### Detection logic
-A vision block occurs when a note (or set of notes) in the center of the grid occludes a following note:
+A vision block occurs when a tall stack or tower of notes occludes a note arriving shortly after:
 
-1. For each note N at beat B in lane x ∈ {1,2} and layer y ∈ {0,1,2}:
-2. Check if any note N' exists at beat B' > B (within 0.25–1.0 beats ahead) that is "behind" N from the player's perspective — i.e., N' is in the same or adjacent lane/layer.
-3. A vision block is specifically when a face note (x ∈ {1,2}, y=1) precedes another note by 0.125–0.5 beats.
-4. Broader definition: any note at (x ∈ {1,2}, any y) that occludes a following note.
+1. For each stack or tower (≥ 2 same-color notes in the same lane at the same beat), check if any note N' exists at beat B' = B + 0.125 to B + 0.5 in the same or adjacent lane.
+2. The stack's height (number of layers covered) determines the degree of occlusion — a 3-layer tower fully blocks the lane, a 2-note stack partially blocks it.
+3. A vision block is flagged when a ≥ 2-note stack precedes another note within 0.5 beats in a lane within |Δx| ≤ 1.
 
-Simpler heuristic: count notes in face-note positions (x ∈ {1,2}) — any cluster of ≥ 2 face notes within 0.25 beats of each other constitutes a potential vision block. Rate: `vb_rate = n_vb_notes / total_notes`.
+Simpler heuristic: count pairs of (stack/tower at beat B) + (any note at beat B + 0.125–0.5 in same/adjacent lane). Rate: `vb_rate = n_vision_blocks / total_notes`.
 
-False-positive risk: face notes in isolation don't necessarily cause vision blocks; the blocking only occurs if another note follows within the reaction window. For feature engineering, using the face-note rate as a proxy for vision block potential is sufficient.
+False-positive risk: stacks followed by notes in the same lane are common in many map styles. Require the following note to be close in time (≤ 0.5 beats) and close in lane (|Δx| ≤ 1) to limit false positives.
 
 ---
 
@@ -1102,19 +1188,24 @@ False-positive risk: face notes in isolation don't necessarily cause vision bloc
 **Category signal:** Standard, Extreme — visual variety in stacked notes
 
 ### What it looks like
-The window image shows a configuration similar to a tower but with a gap: two blue notes at the top and bottom of a lane (y=0 and y=2) with an empty space at y=1 — or a three-note stack with the middle note replaced by a note of the opposite color or absent. From the glossary: "A 3-block or larger tower containing a gap allowing for vision through the tower."
+![Window pattern](patterns/window/window.jpg)
+
+The image shows two instances of the window pattern at different depths (time points). In each instance, one red note and one blue note are placed at the extreme vertical positions (y=0 and y=2) while the entire middle row (y=1) is left empty — creating an open "window" through the centre of the grid. The two notes in each instance are in different lanes (one on the left side, one on the right), and their cut directions sweep through the open centre space. From the glossary: "A 3-block or larger tower containing a gap allowing for vision through the tower."
+
+The defining property is vertical: **at a given beat, notes occupy y=0 and y=2 but nothing occupies y=1** — regardless of whether those notes are the same or different colors, or share the same lane.
 
 ### Detection logic
-A window is a same-color vertical grouping in a lane that has a gap (missing note in the middle):
+A window occurs when a timing slot has notes at the top and bottom rows with the middle row empty:
 
-1. In a timing slot, for a given color and lane, check all notes present across layers y ∈ {0,1,2}.
-2. If notes exist at y=0 and y=2 but NOT y=1 → window (gap in the middle).
-3. Alternatively, for larger windows: notes exist at multiple non-consecutive layers with a gap.
-4. The key: `max(y) - min(y) ≥ 2` with fewer notes than layers spanned.
+1. For a given beat (timing slot), collect all notes across all colors and lanes.
+2. If any note exists at y=2 AND any note exists at y=0 AND no note exists at y=1 → window.
+3. Alternatively, for same-color same-lane windows (tower-with-gap sub-type): notes at y=0 and y=2 in the same lane and same color with y=1 empty.
+4. The key: the middle layer (y=1) is unoccupied, creating visual openness.
 
 Concretely:
-- Notes at y=0 and y=2 (layers 0 and 2) in same lane, same timing slot, same color = window.
-- The y=1 position is either empty or has the OPPOSITE color note (the latter makes it a face-note + window combination).
+- A red note at (x=0, y=2) + a blue note at (x=3, y=0) at the same beat with y=1 empty = window.
+- A blue note at (x=2, y=0) + a blue note at (x=2, y=2) at the same beat with y=1 empty = same-lane window (tower-with-gap sub-type).
+- The y=1 position may be empty across all lanes, or may contain a note in a different lane that doesn't obstruct the "window" view.
 
 A window slider is the same concept applied to a slider: a 3-dot slider with the middle dot removed.
 

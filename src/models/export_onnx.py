@@ -45,12 +45,15 @@ DROP_COLS = ['category', 'map_id', 'key', 'map_name', 'hash',
 
 # Hyperparameters for the fresh pattern-only GradientBoosting
 PATTERN_GB_PARAMS = {
-    'n_estimators': 300,
-    'max_depth': 4,
-    'learning_rate': 0.05,
-    'subsample': 0.8,
-    'min_samples_split': 5,
-    'random_state': 42,
+    'n_estimators':      676,
+    'max_depth':         3,
+    'learning_rate':     0.03536644964531017,
+    'subsample':         0.8781888865621649,
+    'min_samples_split': 13,
+    'min_samples_leaf':  9,
+    'max_features':      'sqrt',
+    'ccp_alpha':         0.003914261577592328,
+    'random_state':      42,
 }
 
 
@@ -144,12 +147,57 @@ def export_from_pkl(pkl_name: str, features_csv: Path,
     return _save(pkl_name, onnx_bytes, list(X.columns), le, imputer, scaler)
 
 
+def _make_sample_weights(y_enc: np.ndarray, le, X_sc: np.ndarray,
+                         feature_names: list) -> np.ndarray:
+    """
+    Balanced weights with eBPM-split boosting for the Extreme class.
+
+    Extreme = Tier 4 Speed (>400 BPM) OR Tier 4 Tech. The two sub-populations
+    are confused with Speed and Tech respectively. Tech-side Extreme maps
+    (ebpm_left_mean < 200) are nearly indistinguishable from Tech and need a
+    stronger boost; Speed-side Extreme maps are more separable via crossover_rate.
+
+    Weights (per fold, applied to training set only):
+      Accuracy / Speed / Standard / Tech : balanced inverse-frequency
+      Extreme Tech-side (eBPM < 200)     : balanced × 4.0
+      Extreme Speed-side (eBPM ≥ 200)    : balanced × 2.5
+    """
+    from sklearn.utils.class_weight import compute_sample_weight
+    weights = compute_sample_weight('balanced', y_enc).astype(float)
+    extreme_idx  = list(le.classes_).index('Extreme')
+    ext_mask     = y_enc == extreme_idx
+
+    ebpm_col = feature_names.index('ebpm_left_mean')
+    ebpm     = X_sc[ext_mask, ebpm_col]
+    idx      = np.where(ext_mask)[0]
+    weights[idx[ebpm <  0]] *= 4.0   # Tech-side  (standardised eBPM < mean)
+    weights[idx[ebpm >= 0]] *= 2.5   # Speed-side (standardised eBPM ≥ mean)
+    return weights
+
+
+def _cv_f1_weighted(params: dict, X: np.ndarray, y: np.ndarray,
+                    le, feature_names: list, n_splits: int = 5) -> np.ndarray:
+    """5-fold CV with per-fold eBPM-split Extreme sample weights."""
+    from sklearn.metrics import f1_score
+    cv = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
+    scores = []
+    for train_idx, test_idx in cv.split(X, y):
+        w = _make_sample_weights(y[train_idx], le, X[train_idx], feature_names)
+        m = GradientBoostingClassifier(**params)
+        m.fit(X[train_idx], y[train_idx], sample_weight=w)
+        scores.append(f1_score(y[test_idx], m.predict(X[test_idx]), average='weighted'))
+    return np.array(scores)
+
+
 def export_pattern_classifier(features_csv: Path) -> Path:
     """Train a fresh GradientBoosting on pattern-only features and export.
 
     This is the model for the NPM/browser package. It only needs features
     computable from the map zip file — no BeatSaver metadata API required.
     GradientBoosting is used because skl2onnx has full native support for it.
+    Extreme class uses eBPM-split weights: Tech-side (eBPM<200) gets 4×,
+    Speed-side (eBPM≥200) gets 2.5×, matching the Tier 4 Speed / Tier 4 Tech
+    definition from the pooling criteria.
     """
     logger.info(f"\n{'='*60}\nExporting pattern_classifier (GradientBoosting, train fresh)\n{'='*60}")
 
@@ -160,15 +208,14 @@ def export_pattern_classifier(features_csv: Path) -> Path:
     logger.info(f"  Features: {n}  |  Classes: {list(le.classes_)}")
     logger.info(f"  Training on {len(X_sc)} samples…")
 
-    model = GradientBoostingClassifier(**PATTERN_GB_PARAMS)
-    model.fit(X_sc, y_enc)
+    # CV with eBPM-split Extreme weights
+    scores = _cv_f1_weighted(PATTERN_GB_PARAMS, X_sc.values, y_enc, le, feature_names)
+    logger.info(f"  5-fold CV F1 (eBPM-split Extreme weights): {scores.mean():.4f} ± {scores.std():.4f}")
 
-    cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
-    scores = cross_val_score(
-        GradientBoostingClassifier(**PATTERN_GB_PARAMS),
-        X_sc, y_enc, cv=cv, scoring='f1_weighted',
-    )
-    logger.info(f"  5-fold CV F1: {scores.mean():.4f} ± {scores.std():.4f}")
+    # Final model on all data with same weights
+    sample_weights = _make_sample_weights(y_enc, le, X_sc.values, feature_names)
+    model = GradientBoostingClassifier(**PATTERN_GB_PARAMS)
+    model.fit(X_sc, y_enc, sample_weight=sample_weights)
 
     onnx_bytes = _to_onnx(model, n)
     _verify(model, onnx_bytes, X_sc.values[:50])
@@ -177,24 +224,58 @@ def export_pattern_classifier(features_csv: Path) -> Path:
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
-def main():
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+REPO_ROOT  = Path(__file__).resolve().parent.parent.parent
+JS_SCRIPT  = REPO_ROOT / 'js' / 'lib' / 'scripts' / 'compute_features_batch.js'
 
-    merged  = Path('data/processed/features_merged.csv')
-    pattern = Path('data/processed/pattern_features.csv')
+
+def compute_js_features(maps_dir: Path) -> pd.DataFrame:
+    """
+    Run compute_features_batch.js to get the exact feature vector that the
+    ONNX inference pipeline will compute at runtime.
+    """
+    import shutil, subprocess, sys
+    node = shutil.which('node')
+    if not node:
+        raise RuntimeError('node not found in PATH')
+    if not JS_SCRIPT.exists():
+        raise FileNotFoundError(f'JS script not found: {JS_SCRIPT}')
+
+    logger.info(f'Running JS feature extractor on {maps_dir}…')
+    result = subprocess.run(
+        [node, str(JS_SCRIPT), '--maps', str(maps_dir)],
+        capture_output=True, text=True, cwd=str(REPO_ROOT),
+    )
+    for line in result.stderr.strip().splitlines():
+        logger.info(f'  [node] {line}')
+    if result.returncode != 0:
+        raise RuntimeError(f'JS script failed (exit {result.returncode})')
+
+    records = json.loads(result.stdout)
+    df = pd.DataFrame(records).fillna(0)
+    logger.info(f'  JS features: {len(df)} maps × {len(df.columns)} columns')
+    return df
+
+
+def main():
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--maps', default='data/raw/maps')
+    args = parser.parse_args()
+
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    maps_dir = Path(args.maps)
+
+    # Compute features using the EXACT same pipeline as JS inference
+    df = compute_js_features(maps_dir)
+    df = df[df['category'] != 'Balanced'].copy()
+
+    # Save the JS feature CSV for inspection / reuse
+    js_csv = Path('data/processed/js_features.csv')
+    df.to_csv(js_csv, index=False)
+    logger.info(f'  Saved JS features → {js_csv}')
 
     exported = []
-
-    tuned = Path('models/tuned')
-
-    # gradient_boosting: tuned (87.40% CV F1), 263 merged features
-    exported.append(export_from_pkl('gradient_boosting', merged, pkl_dir=tuned))
-
-    # random_forest: tuned winner (88.54% CV F1), 263 merged features
-    exported.append(export_from_pkl('random_forest', merged, pkl_dir=tuned))
-
-    # pattern_classifier: NPM/browser target (pattern features only, no metadata)
-    exported.append(export_pattern_classifier(pattern))
+    exported.append(export_pattern_classifier(js_csv))
 
     logger.info(f"\n{'='*60}\nSummary\n{'='*60}")
     for p in exported:

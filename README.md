@@ -2,7 +2,7 @@
 
 ML classifier for Beat Saber custom maps into 5 categories: **Tech**, **Speed**, **Accuracy**, **Standard**, **Extreme**.
 
-The primary signal comes from note-level pattern features extracted directly from `.dat` map files — what a player actually has to hit, not summary metadata. The best models (Optuna-tuned XGBoost and LightGBM on merged features) reach **87.97% CV F1**. A self-contained pattern-only classifier is exported to ONNX for use in JavaScript environments.
+The primary signal comes from note-level pattern features extracted directly from `.dat` map files — what a player actually has to hit, not summary metadata. The pattern-only ONNX classifier reaches **84.57% CV F1** (103 features, GradientBoosting, Optuna-tuned). It runs entirely in browser and Node.js with no BeatSaver metadata API required.
 
 ## Categories
 
@@ -280,12 +280,9 @@ Full progression from metadata-only to the final tuned models:
 | Stage | CV F1 |
 |-------|-------|
 | Metadata only (XGBoost baseline) | 64.3% |
-| + 93 pattern features | 86.5% |
-| + 39 pattern types (130 features) | 84.6%* |
-| + 72 windowed/temporal features | 84.6% |
-| Optuna-tuned XGBoost / LightGBM | **87.97%** |
-
-*untuned; GradientBoosting degrades at high dimensionality without tuning.
+| JS pattern pipeline (103 features, untuned) | 82.97% |
+| + Extreme eBPM-split weighting | 84.03% |
+| + Optuna tuning (100 trials) | **84.57%** |
 
 See [`docs/RESULTS.md`](docs/RESULTS.md) for full per-class breakdowns and finding notes.
 

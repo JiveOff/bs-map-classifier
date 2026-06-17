@@ -1,0 +1,51 @@
+name: Integration Tests
+
+on:
+  schedule:
+    - cron: '0 2 * * *'   # nightly at 02:00 UTC
+  workflow_dispatch:        # manual trigger from GitHub UI
+
+permissions:
+  contents: read
+  checks: write
+
+jobs:
+  integration:
+    name: Live BeatSaver inference
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: pnpm
+          cache-dependency-path: js/pnpm-lock.yaml
+
+      - name: Install dependencies
+        working-directory: js
+        run: pnpm install --ignore-scripts
+
+      - name: Run integration tests
+        working-directory: js/lib
+        env:
+          INTEGRATION: '1'
+        run: |
+          node --test \
+            --test-reporter=spec --test-reporter-destination=stdout \
+            --test-reporter=tap  --test-reporter-destination=test-results.tap \
+            tests/integration.test.js
+
+      - name: Publish test results
+        uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: Integration Tests — BeatSaver
+          path: js/lib/test-results.tap
+          reporter: tap
+          fail-on-error: true

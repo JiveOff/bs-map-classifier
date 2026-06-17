@@ -31,11 +31,18 @@ python src/data/downloader.py --csv dataset_wc_pooling.csv --output data/raw/map
 python src/data/downloader.py --csv dataset_wc_pooling.csv --output data/raw/maps --limit 50
 python src/data/downloader.py --csv dataset_wc_pooling.csv --output data/raw/maps --category Speed
 
-# 3. Parse downloaded maps and extract pattern features
+# 3. Parse downloaded maps and extract statistical features (eBPM, rotation, histograms, etc.)
 python src/data/map_parser.py --maps data/raw/maps --output data/processed/pattern_features.csv
 
-# 4. Train all baseline models (on metadata features for now)
-python src/models/baseline.py --features data/processed/features.csv --output models/baseline_models --cross_validate
+# 4. Run JS annotator to extract named pattern counts (n_doubles, n_hooks, etc.)
+#    Requires Node.js ≥18. Merges JS counts with map_parser.py statistical features.
+python src/data/pattern_features_js.py \
+    --maps data/raw/maps \
+    --base-features data/processed/pattern_features.csv \
+    --output data/processed/pattern_features_merged.csv
+
+# 5. Train all baseline models
+python src/models/baseline.py --features data/processed/pattern_features_merged.csv --output models/baseline_models --cross_validate
 ```
 
 No test suite exists yet (`tests/` is empty). `notebooks/` is empty and reserved for Jupyter exploration.
@@ -54,11 +61,20 @@ dataset_wc_pooling.csv (529 maps, with header row)
         (downloads .zip from BeatSaver, extracts all difficulties,
          saves _dataset.json with characteristic/difficulty/bpm)
             │
-            └─► src/data/map_parser.py ──► data/processed/pattern_features.csv
-                (parses the correct .dat file, extracts note-level patterns)
+            ├─► src/data/map_parser.py ──► data/processed/pattern_features.csv
+            │   (statistical features only: eBPM, rotation, lane/layer histograms,
+            │    timing CV, windowed features, obstacle/arc density)
+            │
+            ├─► js/lib/scripts/annotate_batch.js  (Node.js)
+            │   (canonical JS pattern annotator → per-map named pattern counts:
+            │    n_double, n_hook, n_inline, n_vision_block, etc.)
+            │
+            └─► src/data/pattern_features_js.py
+                (calls annotate_batch.js, merges JS counts + map_parser stats)
                     │
-                    └─► src/models/baseline.py ──► models/baseline_models/*.pkl
-                        (can train on metadata features, pattern features, or merged)
+                    └─► data/processed/pattern_features_merged.csv
+                            │
+                            └─► src/models/baseline.py ──► models/baseline_models/*.pkl
 ```
 
 ### CSV Column Names
@@ -88,9 +104,9 @@ Downloads from `https://beatsaver.com/api/maps/id/{key}` and extracts the zip. E
 
 The zip contains **all difficulties**. `map_parser.py` reads `_dataset.json` to know which `.dat` to analyse.
 
-### Pattern Feature Extraction (`src/data/map_parser.py`)
+### Statistical Feature Extraction (`src/data/map_parser.py`)
 
-The core of the project. Parses the actual `.dat` beatmap file for the labelled difficulty and extracts note-level features that reflect how the map actually plays.
+Parses the actual `.dat` beatmap file and computes **signal-level statistical features** only. Named pattern counts are handled separately by the JS annotator.
 
 **Grid reference** (from `wiki/wiki/mapping/map-format/beatmap.md`):
 - Lanes (x): 0=far-left, 1=centre-left, 2=centre-right, 3=far-right
@@ -112,35 +128,46 @@ The core of the project. Parses the actual `.dat` beatmap file for the labelled 
 | Rotation | `rotation_mean_left/right/total` | High → Tech; Low → Speed |
 | Arcs/chains | `arc_rate`, `chain_rate` | Arc-heavy → Accuracy |
 | Obstacles | `dodge_wall_count/rate`, `crouch_wall_count/rate`, `wall_density` | Walls → Tech/Extreme |
-
-**Named pattern counts** (from `count_patterns()` — see `docs/patterns/<name>/` for wiki reference images):
-
-| Pattern | Count feature | Detectable? | Category signal |
-|---|---|---|---|
-| Stream | `n_stream_runs`, `n_stream_notes`, `longest_stream` | MED | High → Speed |
-| Vibro stream | `n_vibro_notes` | MED | High → Speed/Extreme |
-| Double | `n_doubles` | HIGH | High → Standard/Extreme |
-| Scissor | `n_scissor` | HIGH | Present → Tech/Accuracy |
-| Stack | `n_stacks` | HIGH | High → Standard/Extreme |
-| Tower | `n_towers` | HIGH | High → Extreme |
-| Crossover | `n_crossovers` | HIGH | High → Tech |
-| Crossover Scissor | `n_crossover_scissor` | HIGH | High → Tech |
-| DD (parity break) | `n_dd` | HIGH | High → Tech |
-| Triangle | `n_triangles` | MED | Present → Tech |
-| Inline | `n_inline` | HIGH | High → Tech |
-| Jump | `n_jumps` | MED | High → Speed/Extreme |
-| Invert | `n_inverts` | HIGH | High → Accuracy/Tech |
-| Flick | `n_flicks` | MED | High → Speed |
-| Gallop | `n_gallops` | MED | Present → Standard/Extreme |
-| Quad | `n_quads` | HIGH | Rare → Extreme |
-| Paul | `n_paul` | HIGH | Rare → Tech |
-| Face note | `n_face_notes` | HIGH | High → Tech/Extreme |
-| Dot note | `n_dot_notes` | HIGH | High → Speed/Standard |
-| Top-row note | `n_top_row_notes` | HIGH | High → Tech/Extreme |
-
-All `n_*` counts also have a corresponding `n_*_rate` (normalised by total note count).
+| Windowed (16-beat windows) | `win_*_{max,mean,std,p90,peak_ratio}` | Temporal distribution of each metric |
 
 **eBPM formula**: `ebpm = bpm * 0.5 / per_hand_interval_beats` — at 1/4 stream (interval=0.5 beats) eBPM equals song BPM, matching the BSMG wiki definition.
+
+### Named Pattern Counts (`js/lib/scripts/annotate_batch.js` + `src/data/pattern_features_js.py`)
+
+The **JS annotator** (`js/lib/src/patterns.js`) is the single source of truth for named pattern detection. `annotate_batch.js` runs it over all downloaded maps and outputs per-map counts. `pattern_features_js.py` calls it via subprocess and merges the counts (prefixed `js_`) into the statistical features CSV.
+
+Pattern counts produced (each also has a `_rate` variant normalised by note count):
+
+| Pattern | JS count column | Category signal |
+|---|---|---|
+| Stream | `js_n_stream` | High → Speed |
+| Vibro stream | `js_n_vibro_stream` | High → Speed/Extreme |
+| Double | `js_n_double` | High → Standard/Extreme |
+| Scissor | `js_n_scissor` | Present → Tech/Accuracy |
+| Stack | `js_n_stack` | High → Standard/Extreme |
+| Tower | `js_n_tower` | High → Extreme |
+| Crossover | `js_n_crossover` | High → Tech |
+| Crossover Scissor | `js_n_crossover_scissor` | High → Tech |
+| DD (parity break) | `js_n_dd` | High → Tech |
+| Triangle | `js_n_triangle` | Present → Tech |
+| Inline | `js_n_inline` | High → Tech |
+| Jump | `js_n_jump` | High → Speed/Extreme |
+| Invert | `js_n_invert` | High → Accuracy/Tech |
+| Flick | `js_n_flick` | High → Speed |
+| Gallop | `js_n_gallop` | Present → Standard/Extreme |
+| Quad | `js_n_quad` | Rare → Extreme |
+| Paul | `js_n_paul` | Rare → Tech |
+| Face note | `js_n_face_note` | High → Tech/Extreme |
+| Dot note | `js_n_dot_note` | High → Speed/Standard |
+| Hook | `js_n_hook` | Present → Standard/Tech |
+| Window | `js_n_window` | Present → Standard/Extreme |
+| Handclap | `js_n_handclap` | Present → Aggressive mapping |
+| Vision block | `js_n_vision_block` | Present → Tech/Extreme |
+| Loloppe | `js_n_loloppe` | Present → Tech |
+| Flower | `js_n_flower` | Rare → Accuracy |
+| Bomb reset | `js_n_bomb_reset` | Present → Tech |
+| Bomb hold | `js_n_bomb_hold` | Present → Extreme |
+| Hammer hit | `js_n_hammer_hit` | Present → Extreme/Tech |
 
 ### Model Training (`src/models/baseline.py`)
 
@@ -152,15 +179,22 @@ Trains 7 algorithms (LogisticRegression, RandomForest, XGBoost, LightGBM, Decisi
 
 ```
 src/data/
-  features_v2.py     # metadata feature extraction (canonical, replaces features.py)
-  downloader.py      # BeatSaver map downloader
-  map_parser.py      # .dat file parser → pattern features
+  features_v2.py          # metadata feature extraction (canonical)
+  downloader.py           # BeatSaver map downloader
+  map_parser.py           # .dat file parser → statistical features only (eBPM, rotation, etc.)
+  pattern_features_js.py  # calls JS annotator, merges pattern counts into training CSV
 src/models/
-  baseline.py        # model training and evaluation
-data/raw/maps/       # downloaded + extracted map zips (gitignored)
+  baseline.py             # model training and evaluation
+js/lib/
+  src/parser.js           # beatmap .dat parser (v2/v3/v4)
+  src/patterns.js         # canonical pattern annotator (single source of truth)
+  src/features.js         # statistical feature extraction (mirrors map_parser.py)
+  scripts/annotate_batch.js  # batch runner: walks maps dir, outputs per-map pattern counts
+data/raw/maps/            # downloaded + extracted map zips (gitignored)
 data/processed/
-  features.csv       # metadata features (529→503 maps after Balanced exclusion)
-  pattern_features.csv  # note-level pattern features (after downloading)
+  features.csv                   # metadata features (529→503 maps after Balanced exclusion)
+  pattern_features.csv           # statistical features from map_parser.py
+  pattern_features_merged.csv    # merged: statistical + JS pattern counts (training input)
   category_distribution.csv
   feature_stats_by_category.json
 docs/patterns/       # 45 named pattern folders, each with wiki reference image(s)
@@ -171,4 +205,5 @@ wiki/                # BSMG wiki git submodule (mapping docs, glossary, map form
 ### Known Data Issues
 
 - NaN values in some `bsmap` JSON-derived features (missing keys) → SVM and KNN fail; Phase 2 task to impute
-- `pattern_features.csv` only exists once maps are downloaded and parsed — baseline training currently uses `features.csv` only
+- `pattern_features_merged.csv` only exists once maps are downloaded, parsed, and JS-annotated — baseline training currently uses `features.csv` only
+- The JS annotator is the single source of truth for pattern detection; `pattern_annotator.py` is used only for the HTML viewer overlay

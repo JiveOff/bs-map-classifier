@@ -5,8 +5,13 @@ on:
     branches: ['**']
   pull_request:
 
+permissions:
+  contents: read
+  checks: write
+
 jobs:
   build:
+    name: Build
     runs-on: ubuntu-latest
 
     steps:
@@ -19,6 +24,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: pnpm
+          cache-dependency-path: js/pnpm-lock.yaml
 
       - name: Install dependencies
         working-directory: js
@@ -28,10 +35,129 @@ jobs:
         working-directory: js
         run: pnpm --filter bs-map-classifier run build
 
-      - name: Test library
-        working-directory: js/lib
-        run: node --test tests/*.test.js
-
       - name: Build extension & userscript
         working-directory: js
         run: pnpm --filter bs-pattern-overlay run build
+
+      - name: Upload dist artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lib-dist
+          path: js/lib/dist/
+
+  test:
+    name: Test (Node ${{ matrix.node }})
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['18', '20', '22']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+          cache-dependency-path: js/pnpm-lock.yaml
+
+      - name: Install dependencies
+        working-directory: js
+        run: pnpm install --ignore-scripts
+
+      - name: Download dist artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: lib-dist
+          path: js/lib/dist/
+
+      - name: Unit tests (ESM)
+        working-directory: js/lib
+        continue-on-error: true
+        run: |
+          node --test \
+            --test-reporter=spec --test-reporter-destination=stdout \
+            --test-reporter=tap  --test-reporter-destination=test-results.tap \
+            tests/*.test.js
+
+      - name: Publish test results
+        uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: Unit Tests — Node ${{ matrix.node }}
+          path: js/lib/test-results.tap
+          reporter: tap
+          fail-on-error: true
+
+      - name: Smoke test — CJS (require)
+        working-directory: js/lib
+        run: |
+          node -e "
+            const pkg = require('./dist/cjs/index.js');
+            const fns = ['loadClassifierFromBuffers', 'classifyMap', 'parseBeatmap', 'computeFeatures', 'annotatePatterns'];
+            for (const fn of fns) {
+              if (typeof pkg[fn] !== 'function') throw new Error('CJS missing export: ' + fn);
+            }
+            console.log('CJS exports OK:', fns.join(', '));
+          "
+
+      - name: Smoke test — embedded ESM bundle
+        working-directory: js/lib
+        run: |
+          node --input-type=module --eval "
+            import { loadClassifierFromBuffers } from './dist/embedded.mjs';
+            if (typeof loadClassifierFromBuffers !== 'function')
+              throw new Error('embedded.mjs missing loadClassifierFromBuffers');
+            console.log('embedded.mjs export OK');
+          "
+
+  validate-onnx:
+    name: Validate ONNX model
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install onnxruntime
+        run: pip install onnxruntime numpy --quiet
+
+      - name: Validate pattern_classifier.onnx
+        run: |
+          python - <<'EOF'
+          import json, sys
+          import numpy as np
+          import onnxruntime as rt
+
+          CLASSES = {'Accuracy', 'Extreme', 'Speed', 'Standard', 'Tech'}
+          MODEL   = 'models/onnx/pattern_classifier.onnx'
+          META    = 'models/onnx/pattern_classifier_meta.json'
+
+          meta = json.loads(open(META).read())
+          n    = meta['n_features']
+          assert set(meta['classes']) == CLASSES, f"Unexpected classes: {meta['classes']}"
+          assert len(meta['imputer_medians']) == n, 'imputer_medians length mismatch'
+          assert len(meta['scaler_mean'])     == n, 'scaler_mean length mismatch'
+          assert len(meta['scaler_scale'])    == n, 'scaler_scale length mismatch'
+
+          sess     = rt.InferenceSession(MODEL)
+          inp_name = sess.get_inputs()[0].name
+          dummy    = np.zeros((1, n), dtype=np.float32)
+          labels, probs = sess.run(None, {inp_name: dummy})
+
+          assert labels.shape == (1,),   f'Unexpected label shape: {labels.shape}'
+          assert probs.shape  == (1, 5), f'Unexpected prob shape: {probs.shape}'
+          assert labels[0] in meta['classes'], f'Unknown class: {labels[0]}'
+          assert abs(probs[0].sum() - 1.0) < 1e-4, 'Probabilities do not sum to 1'
+
+          print(f'OK — {n} features, prediction: {labels[0]} ({probs[0].max():.1%})')
+          EOF

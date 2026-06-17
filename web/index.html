@@ -314,7 +314,7 @@
         <h1>BS Map Classifier</h1>
         <div class="saber blue"></div>
       </div>
-      <p class="tagline">ML-powered Beat Saber map classification · 87.97% CV F1</p>
+      <p class="tagline">ML-powered Beat Saber map classification · 84.57% CV F1</p>
     </header>
 
     <div class="panel">
@@ -388,6 +388,22 @@
         <div class="patterns-label">// top patterns</div>
         <div class="patterns-grid" id="patternsGrid"></div>
       </div>
+    </div>
+  </div>
+
+  <div class="wrap" style="position:relative;z-index:1;">
+    <div class="panel" style="margin-top:0;font-size:0.72rem;line-height:1.9;color:var(--muted);">
+      <div style="font-size:0.65rem;letter-spacing:0.2em;text-transform:uppercase;margin-bottom:12px;color:var(--text);">// how it works</div>
+      <p style="margin-bottom:10px;">
+        The classifier parses the actual <strong style="color:var(--text)">.dat beatmap file</strong> — the raw note data a player hits — and extracts 103 features: eBPM per hand, direction histograms, lane/layer usage, rotation, and counts of named patterns (crossovers, doubles, streams, inverts, hooks, etc.) detected by the same engine that powers the overlay.
+      </p>
+      <p style="margin-bottom:10px;">
+        Those features are fed into a <strong style="color:var(--text)">Gradient Boosting classifier</strong> trained on 493 maps from the <a href="https://cube.community/pooling" style="color:inherit;">BSWC pooling database</a> — a curated set of competitive maps labelled by the BSWC pooling team. The model runs fully in-browser via ONNX Runtime WebAssembly; no server, no metadata API call needed.
+      </p>
+      <p>
+        <strong style="color:var(--text)">5-fold CV F1: 84.57%</strong> &nbsp;·&nbsp; 493 maps &nbsp;·&nbsp; 5 classes &nbsp;·&nbsp;
+        Accuracy ≈ 100% · Speed ≈ 95% · Standard ≈ 84% · Tech ≈ 82% · Extreme ≈ 75%
+      </p>
     </div>
   </div>
 

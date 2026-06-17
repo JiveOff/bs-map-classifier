@@ -52,15 +52,16 @@ test('computeFeatures: lane rates sum to 1 across all lanes', () => {
 
 // ── Layer rates ───────────────────────────────────────────────────────────────
 
-test('computeFeatures: top_row_rate is 1 when all notes are in top layer', () => {
+test('computeFeatures: layer_2_rate is 1 when all notes are in top layer', () => {
   const notes = [
     note(0.0, 0, 2, 0, 1),
     note(0.5, 1, 2, 1, 0),
   ];
   const feats = computeFeatures(notes, [], [], [], 120);
-  assert.equal(feats.top_row_rate, 1.0);
+  // top_row_rate alias removed — use layer_2_rate directly
   assert.equal(feats.layer_2_rate, 1.0);
   assert.equal(feats.layer_0_rate, 0.0);
+  assert.equal(feats.top_row_rate, undefined);
 });
 
 // ── Hand balance ──────────────────────────────────────────────────────────────
@@ -97,14 +98,15 @@ test('computeFeatures: left_note_rate is 0.5 for balanced notes', () => {
 
 // ── Direction rates ───────────────────────────────────────────────────────────
 
-test('computeFeatures: dot_note_rate is 1 for all dot notes (dir=8)', () => {
+test('computeFeatures: dir_8_rate is 1 for all dot notes (dir=8)', () => {
   const notes = [
     note(0.0, 0, 0, 0, 8),
     note(0.5, 1, 0, 1, 8),
   ];
   const feats = computeFeatures(notes, [], [], [], 120);
-  assert.equal(feats.dot_note_rate, 1.0);
+  // dot_note_rate alias removed — use dir_8_rate directly
   assert.equal(feats.dir_8_rate, 1.0);
+  assert.equal(feats.dot_note_rate, undefined);
 });
 
 test('computeFeatures: direction rates sum to 1', () => {
@@ -175,14 +177,16 @@ test('toFeatureVector: preserves correct order', () => {
 
 // ── Arc/chain rates ───────────────────────────────────────────────────────────
 
-test('computeFeatures: arc_rate and chain_rate are 0 with no arcs/chains', () => {
+test('computeFeatures: arc_rate is 0 with no arcs (chain_rate removed — near-zero importance)', () => {
   const notes = [
     note(0.0, 0, 0, 0, 1),
     note(0.5, 3, 0, 1, 0),
   ];
   const feats = computeFeatures(notes, [], [], [], 120);
   assert.equal(feats.arc_rate, 0);
-  assert.equal(feats.chain_rate, 0);
+  assert.equal(feats.arc_count, 0);
+  // chain_rate and chain_count removed from feature set
+  assert.equal(feats.chain_rate, undefined);
 });
 
 // ── Feature object completeness ───────────────────────────────────────────────
@@ -195,12 +199,15 @@ test('computeFeatures: returns all expected base feature keys', () => {
   const feats = computeFeatures(notes, [], [], [], 120);
   const expected = [
     'lane_0_rate', 'lane_1_rate', 'lane_2_rate', 'lane_3_rate',
-    'layer_0_rate', 'layer_1_rate', 'layer_2_rate', 'top_row_rate',
-    'dir_0_rate', 'dir_8_rate', 'dot_note_rate',
+    'layer_0_rate', 'layer_1_rate', 'layer_2_rate',
+    // top_row_rate removed (alias of layer_2_rate)
+    'dir_0_rate', 'dir_8_rate',
+    // dot_note_rate removed (alias of dir_8_rate)
     'left_note_rate', 'hand_imbalance',
     'dd_rate_left', 'dd_rate_right', 'dd_rate_total',
     'ebpm_max_overall',
-    'arc_rate', 'chain_rate',
+    'arc_rate',
+    // chain_rate removed (near-zero importance)
     'wall_density',
   ];
   for (const key of expected) {

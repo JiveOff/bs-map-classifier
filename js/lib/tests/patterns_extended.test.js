@@ -80,11 +80,11 @@ test('loloppe: not emitted for different directions', () => {
 
 // ── Slot-based: handclap ──────────────────────────────────────────────────────
 
-test('handclap: right-moving red and left-moving blue in same slot', () => {
-  // RIGHT_DIRS = {3,5,7}, LEFT_DIRS = {2,4,6}
+test('handclap: right-moving red and left-moving blue in adjacent lanes', () => {
+  // RIGHT_DIRS = {3,5,7}, LEFT_DIRS = {2,4,6}; adjacency |r.x - b.x| <= 1 required
   const notes = [
-    n(0, 0, 1, 0, 3),  // red, going right (dir=3)
-    n(0, 3, 1, 1, 2),  // blue, going left (dir=2)
+    n(0, 1, 1, 0, 3),  // red, x=1, going right (dir=3)
+    n(0, 2, 1, 1, 2),  // blue, x=2, going left (dir=2) — |1-2|=1 ✓
   ];
   const { patterns } = annotatePatterns(notes, 120);
   assert.ok(has(patterns, 'handclap'), 'expected handclap');
@@ -140,23 +140,25 @@ test('window: not emitted when layer gap is only 1', () => {
 
 // ── Slot-based: flower ────────────────────────────────────────────────────────
 
-test('flower: ≥3 same-color same-beat notes with ≥2 distinct non-dot directions', () => {
+test('flower: ≥2 same-color same-position notes with different directions ≤90° apart', () => {
+  // New definition: same (x,y), same color, different directions, angle ≤ 90°
+  // Down (270°) and DownLeft (225°) → angle diff = 45° ≤ 90° ✓
   const notes = [
-    n(0, 0, 0, 0, 0),  // red, dir=up
-    n(0, 1, 1, 0, 1),  // red, dir=down
-    n(0, 2, 0, 0, 3),  // red, dir=right
+    n(0, 1, 1, 0, 1),  // red, x=1, y=1, dir=Down (270°)
+    n(0, 1, 1, 0, 6),  // red, x=1, y=1, dir=DownLeft (225°) — same position, angle=45° ✓
   ];
   const { patterns } = annotatePatterns(notes, 120);
   assert.ok(has(patterns, 'flower'), 'expected flower');
 });
 
-test('flower: not emitted with fewer than 3 same-color notes in slot', () => {
+test('flower: not emitted when notes are at different positions', () => {
+  // Different (x,y) → no overlap → not a flower
   const notes = [
-    n(0, 0, 0, 0, 0),
-    n(0, 1, 0, 0, 1),
+    n(0, 0, 0, 0, 1),  // red, x=0, y=0, dir=Down
+    n(0, 1, 1, 0, 6),  // red, x=1, y=1 — different position
   ];
   const { patterns } = annotatePatterns(notes, 120);
-  assert.ok(!has(patterns, 'flower'), 'only 2 notes, not a flower');
+  assert.ok(!has(patterns, 'flower'), 'different positions, not a flower');
 });
 
 test('flower: not emitted when all non-dot notes share the same direction', () => {
@@ -212,10 +214,12 @@ test('top_row_note: not emitted for y=0 or y=1', () => {
 
 // ── Per-note: vision_block ────────────────────────────────────────────────────
 
-test('vision_block: face note with follower 0.0625..0.5 beats later', () => {
+test('vision_block: stack followed by a note in same/adjacent lane 0.0625..0.5 beats later', () => {
+  // New definition: stack (≥2 same-color same-lane notes) hides a following note
   const notes = [
-    n(0,   1, 0, 0, 8),  // face note (x=1)
-    n(0.25, 0, 0, 1, 8), // follower 0.25 beats later — within window
+    n(0,    1, 0, 0, 1),  // red, x=1, y=0 — stack note 1
+    n(0,    1, 1, 0, 0),  // red, x=1, y=1 — stack note 2 (same lane → stack)
+    n(0.25, 1, 2, 1, 8),  // blue, x=1, 0.25 beats later — hidden behind the stack
   ];
   const { patterns } = annotatePatterns(notes, 120);
   assert.ok(has(patterns, 'vision_block'), 'expected vision_block');
@@ -519,25 +523,23 @@ test('paul: not emitted when interval exceeds VIBRO_MAX (0.14)', () => {
 
 // ── Per-hand: hook ────────────────────────────────────────────────────────────
 
-test('hook: both-up same-hand notes within 1 beat with lane+layer change', () => {
-  // UP_DIRS = {0,4,5}
-  // p: dir=0(Up), n: dir=5(UpRight); both UP; |dx|=1 ≥ 1; |dy|=1 ≥ 1
+test('hook: direction reversal (down→up) at same layer, adjacent lane', () => {
+  // New definition: direction reversal + same y + |Δx| ≤ 1
   const notes = [
-    n(0.0, 0, 0, 0, 0),  // red, Up, x=0 y=0
-    n(0.5, 1, 1, 0, 5),  // red, UpRight, x=1 y=1 → Δx=1, Δy=1 ✓
+    n(0.0, 3, 1, 0, 1),  // red, Down (dir=1), x=3, y=1
+    n(0.5, 2, 1, 0, 0),  // red, Up   (dir=0), x=2, y=1 — reversal, Δy=0, |Δx|=1 ✓
   ];
   const { patterns } = annotatePatterns(notes, 120);
   assert.ok(has(patterns, 'hook'), 'expected hook');
 });
 
-test('hook: both-down also counts', () => {
-  // DOWN_DIRS = {1,6,7}
+test('hook: up→down reversal also counts', () => {
   const notes = [
-    n(0.0, 1, 2, 0, 1),  // red, Down, x=1 y=2
-    n(0.5, 2, 1, 0, 7),  // red, DownRight, x=2 y=1 → Δx=1, Δy=1 ✓
+    n(0.0, 1, 0, 0, 0),  // red, Up   (dir=0), x=1, y=0
+    n(0.5, 2, 0, 0, 1),  // red, Down (dir=1), x=2, y=0 — reversal, Δy=0, |Δx|=1 ✓
   ];
   const { patterns } = annotatePatterns(notes, 120);
-  assert.ok(has(patterns, 'hook'), 'both-down hook should be detected');
+  assert.ok(has(patterns, 'hook'), 'up→down hook should be detected');
 });
 
 test('hook: not emitted when notes are more than 1 beat apart', () => {
@@ -549,10 +551,11 @@ test('hook: not emitted when notes are more than 1 beat apart', () => {
   assert.ok(!has(patterns, 'hook'));
 });
 
-test('hook: not emitted when only lane changes but not layer', () => {
+test('hook: not emitted when no direction reversal (both going up)', () => {
+  // New definition requires reversal; two up-direction notes do not qualify
   const notes = [
-    n(0.0, 0, 1, 0, 0),  // red, Up, y=1
-    n(0.5, 1, 1, 0, 5),  // red, UpRight, y=1 → Δy=0, no layer change
+    n(0.0, 0, 1, 0, 0),  // red, Up     (dir=0), y=1
+    n(0.5, 1, 1, 0, 5),  // red, UpRight (dir=5), y=1 — no reversal
   ];
   const { patterns } = annotatePatterns(notes, 120);
   assert.ok(!has(patterns, 'hook'));
