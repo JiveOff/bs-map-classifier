@@ -28,6 +28,10 @@ jobs:
         working-directory: js
         run: pnpm --filter bs-map-classifier run build
 
+      - name: Test library
+        working-directory: js/lib
+        run: node --test tests/*.test.js
+
       - name: Build extension & userscript
         working-directory: js
         run: pnpm --filter bs-pattern-overlay run build

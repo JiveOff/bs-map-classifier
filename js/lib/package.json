@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "build": "node build.js",
-    "verify": "node verify_parity.js"
+    "verify": "node verify_parity.js",
+    "test": "node --test tests/*.test.js"
   },
   "main": "dist/cjs/index.js",
   "module": "src/index.js",
