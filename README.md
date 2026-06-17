@@ -294,3 +294,7 @@ See [`docs/RESULTS.md`](docs/RESULTS.md) for full per-class breakdowns and findi
 - [BSWC Pooling Team](https://cube.community/pooling) — initial dataset of categorised maps used for training
 - [BSMG Wiki](https://bsmg.wiki/) — mapping format documentation
 - [BeatSaver](https://beatsaver.com/) — map data and API
+
+---
+
+> Most of the code in this repository was AI-generated using [Claude Sonnet 4.6](https://www.anthropic.com/claude).
