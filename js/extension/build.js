@@ -62,6 +62,11 @@ const version  = process.env.RELEASE_VERSION ?? _pkg.version;
 
 // ── Shared esbuild options ─────────────────────────────────────────────────────
 
+// Stub path for Node.js built-ins that bsmap shims import.
+// We only use NoteJumpSpeed and swing.count from bsmap — both are pure math
+// with no I/O — so these built-ins are never actually called at runtime.
+const NODE_STUB = join(__dirname, 'src', 'stubs', 'node-builtins.js');
+
 const sharedOptions = {
   bundle: true,
   minify: true,
@@ -71,6 +76,13 @@ const sharedOptions = {
   // onnxruntime-web is bundled directly into the IIFE so it works in both
   // extension content scripts and userscript sandboxes without relying on globals.
   external: ['onnxruntime-node'],
+  // Redirect Node.js built-ins imported by bsmap's filesystem shims to empty
+  // browser-safe stubs so esbuild can bundle without errors.
+  alias: {
+    'node:path':         NODE_STUB,
+    'node:fs':           NODE_STUB,
+    'node:fs/promises':  NODE_STUB,
+  },
 };
 
 // ── Extension build ────────────────────────────────────────────────────────────
