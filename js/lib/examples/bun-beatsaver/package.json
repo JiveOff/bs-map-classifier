@@ -1,9 +1,8 @@
 {
-  "name": "bs-map-classifier-node-example",
-  "version": "1.0.0",
+  "name": "bs-map-classifier-bun-example",
   "type": "module",
   "scripts": {
-    "start": "node index.mjs"
+    "start": "bun index.ts"
   },
   "dependencies": {
     "bs-map-classifier": "^1.1.2",

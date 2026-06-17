@@ -13,7 +13,6 @@
   },
   "devDependencies": {
     "esbuild": "^0.28.1",
-    "fflate": "^0.8.2",
     "onnxruntime-web": "^1.22.0"
   }
 }

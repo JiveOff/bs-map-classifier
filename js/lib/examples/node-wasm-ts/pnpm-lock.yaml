@@ -11,9 +11,6 @@ importers:
       bs-map-classifier:
         specifier: file:../../bs-map-classifier-0.1.0.tgz
         version: file:../../bs-map-classifier-0.1.0.tgz(onnxruntime-web@1.26.0)(typescript@5.9.3)
-      fflate:
-        specifier: ^0.8.3
-        version: 0.8.3
       onnxruntime-web:
         specifier: ^1.26.0
         version: 1.26.0
@@ -217,7 +214,7 @@ packages:
     resolution: {integrity: sha512-603BddQMv3pUcr4U2dhujk83N2tTDVr/34wII2B6bJy6g+8WD6yUb11jszNs0gdi4PesVWl7ABt8nYMVpnLUcg==}
 
   bs-map-classifier@file:../../bs-map-classifier-0.1.0.tgz:
-    resolution: {integrity: sha512-3f8DdC6Loyfm6tFkjbvwuki7MRlF6GfpbzJsyuVZnVGMDhLJUD/sfP3VqYXHCxWnCXsuHW42/x/vP+jN2i68YA==, tarball: file:../../bs-map-classifier-0.1.0.tgz}
+    resolution: {integrity: sha512-n/HwJIdr0wYxR1bYjVx+z7/0Adk/q2q2HJbDreVnyKaHnhFdSPx2oWMQDlJSj9Q5IYBw7pMPG+ujYbkeIrPKvQ==, tarball: file:../../bs-map-classifier-0.1.0.tgz}
     version: 0.1.0
     engines: {node: '>=18.0.0'}
     peerDependencies:
@@ -397,6 +394,7 @@ snapshots:
   bs-map-classifier@file:../../bs-map-classifier-0.1.0.tgz(onnxruntime-web@1.26.0)(typescript@5.9.3):
     dependencies:
       bsmap: 2.3.5(typescript@5.9.3)
+      fflate: 0.8.3
     optionalDependencies:
       onnxruntime-web: 1.26.0
     transitivePeerDependencies:

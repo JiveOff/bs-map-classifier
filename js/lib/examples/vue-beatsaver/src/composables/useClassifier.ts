@@ -4,8 +4,7 @@ import { parseBeatmap, extractPatternsAndClassifyMap } from 'bs-map-classifier';
 import type { Classifier, MapAnalysisResult } from 'bs-map-classifier';
 import { findDatInfo } from 'bs-map-classifier/parser';
 import { loadEmbeddedClassifier } from 'bs-map-classifier/embedded';
-import { fetchBSInfo, pairsFromInfoDat, RANK } from './useBeatSaver';
-import type { DiffPair } from '../types';
+import { loadFromKey } from 'bs-map-classifier/beatsaver';
 
 const decode = (buf: Uint8Array) => new TextDecoder().decode(buf);
 
@@ -19,10 +18,10 @@ function extractFromZip(buf: ArrayBuffer, char: string, diff: string) {
   const infoRaw = getZipEntry(files, 'Info.dat') ?? getZipEntry(files, 'info.dat');
   if (!infoRaw) throw new Error('Info.dat not found in zip');
 
-  const infoDat                    = JSON.parse(decode(infoRaw)) as Record<string, unknown>;
-  const bpm                        = infoDat._beatsPerMinute as number | null;
+  const infoDat                      = JSON.parse(decode(infoRaw)) as Record<string, unknown>;
+  const bpm                          = infoDat._beatsPerMinute as number | null;
   const { filename, njs, njsOffset } = findDatInfo(infoDat, char, diff);
-  const datRaw                     = getZipEntry(files, filename);
+  const datRaw                       = getZipEntry(files, filename);
   if (!datRaw) throw new Error(`"${filename}" not found in zip — check characteristic/difficulty`);
 
   return { datJson: JSON.parse(decode(datRaw)) as object, infoDat, bpm, njs, njsOffset };
@@ -72,27 +71,17 @@ export function useClassifier() {
     }
   }
 
-  async function classifyFromKey(key: string, pairs: DiffPair[], char: string, diff: string) {
+  async function classifyFromKey(key: string, char: string, diff: string) {
     await run(async () => {
       loadingText.value = 'FETCHING MAP';
-      const info    = await fetchBSInfo(key.toLowerCase());
-      const version = info.versions.at(-1)!;
-
-      const chosen = version.diffs.find((d: DiffPair) => d.characteristic === char && d.difficulty === diff)
-                  ?? [...version.diffs].sort((a: DiffPair, b: DiffPair) => (RANK[b.difficulty] ?? 0) - (RANK[a.difficulty] ?? 0))[0];
-
-      loadingText.value = 'DOWNLOADING ZIP';
-      const buf = await fetch(`https://cdn.beatsaver.com/${version.hash}.zip`)
-        .then(r => { if (!r.ok) throw new Error(`CDN ${r.status}`); return r.arrayBuffer(); });
+      const { beatmap, bpm, songName, songAuthor, mapAuthor, characteristic, difficulty } =
+        await loadFromKey(key.toLowerCase(), char || 'Standard', diff || undefined);
 
       loadingText.value = 'CLASSIFYING';
-      const { datJson, njs, njsOffset } = extractFromZip(buf, chosen.characteristic, chosen.difficulty);
-      const result = await extractPatternsAndClassifyMap(
-        parseBeatmap(datJson), info.metadata.bpm, clf.value!, {}, njs, njsOffset,
-      );
+      const result = await extractPatternsAndClassifyMap(beatmap, bpm, clf.value!);
 
-      const meta = `<strong>${info.metadata.songName}</strong> — ${info.metadata.songAuthorName}<br>` +
-        `mapped by ${info.metadata.levelAuthorName} · ${chosen.characteristic} / ${chosen.difficulty} · ${info.metadata.bpm} BPM`;
+      const meta = `<strong>${songName}</strong> — ${songAuthor}<br>` +
+        `mapped by ${mapAuthor} · ${characteristic} / ${difficulty} · ${bpm} BPM`;
       return { meta, result };
     });
   }

@@ -1,11 +1,10 @@
 import * as ort from 'onnxruntime-web';
-import { unzipSync } from 'fflate';
-import { parseBeatmap, extractPatternsAndClassifyMap } from 'bs-map-classifier';
-import { findDatInfo } from 'bs-map-classifier/parser';
+import { setOrtInstance, setWasmPaths, extractPatternsAndClassifyMap } from 'bs-map-classifier';
+import { loadFromKey } from 'bs-map-classifier/beatsaver';
 import { loadEmbeddedClassifier } from 'bs-map-classifier/embedded';
 
-ort.env.wasm.wasmPaths = new URL('./node_modules/onnxruntime-web/dist/', import.meta.url).href;
-ort.env.wasm.numThreads = 1;
+await setWasmPaths(new URL('./node_modules/onnxruntime-web/dist/', import.meta.url).href);
+setOrtInstance(ort, 'wasm');
 
 const MAP_KEY        = '2b120';
 const CHARACTERISTIC = 'Standard';
@@ -13,34 +12,17 @@ const DIFFICULTY     = 'ExpertPlus';
 
 console.log(`Fetching map ${MAP_KEY}…`);
 
-const [classifier, info] = await Promise.all([
+const [classifier, { beatmap, bpm, songName, songAuthor }] = await Promise.all([
   loadEmbeddedClassifier(),
-  fetch(`https://beatsaver.com/api/maps/id/${MAP_KEY}`)
-    .then(r => { if (!r.ok) throw new Error(`BeatSaver API ${r.status}`); return r.json(); }),
+  loadFromKey(MAP_KEY, CHARACTERISTIC, DIFFICULTY),
 ]);
 
-const version = info.versions.at(-1);
-console.log(`Downloading "${info.metadata.songName}"…`);
+console.log(`Classifying "${songName}"…`);
 
-const zipBuf = await fetch(`https://cdn.beatsaver.com/${version.hash}.zip`)
-  .then(r => { if (!r.ok) throw new Error(`CDN ${r.status}`); return r.arrayBuffer(); });
-const zip    = unzipSync(new Uint8Array(zipBuf));
-
-const getEntry = name => {
-  const key = Object.keys(zip).find(k => k.toLowerCase() === name.toLowerCase());
-  return key ? zip[key] : null;
-};
-
-const infoDat = JSON.parse(new TextDecoder().decode(getEntry('Info.dat') ?? getEntry('info.dat')));
-const { filename, njs, njsOffset } = findDatInfo(infoDat, CHARACTERISTIC, DIFFICULTY);
-const datFile = JSON.parse(new TextDecoder().decode(getEntry(filename)));
-
-const { classification, features, patterns } = await extractPatternsAndClassifyMap(
-  parseBeatmap(datFile), info.metadata.bpm, classifier, {}, njs, njsOffset,
-);
+const { classification, features, patterns } = await extractPatternsAndClassifyMap(beatmap, bpm, classifier);
 
 console.log('');
-console.log(`"${info.metadata.songName}" — ${CHARACTERISTIC}/${DIFFICULTY}`);
+console.log(`"${songName}" by ${songAuthor} — ${CHARACTERISTIC}/${DIFFICULTY}`);
 console.log(`Category:   ${classification.category}`);
 console.log(`Confidence: ${(classification.confidence * 100).toFixed(1)}%`);
 console.log('');

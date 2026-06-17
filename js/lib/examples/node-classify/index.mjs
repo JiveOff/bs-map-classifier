@@ -1,8 +1,5 @@
-import { createRequire } from 'node:module';
 import { classifyFromNotes } from 'bs-map-classifier';
-
-const require = createRequire(import.meta.url);
-const { loadEmbeddedClassifier } = require('bs-map-classifier/embedded');
+import { loadEmbeddedClassifier } from 'bs-map-classifier/embedded';
 
 const classifier = await loadEmbeddedClassifier();
 

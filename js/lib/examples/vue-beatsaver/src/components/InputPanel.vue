@@ -9,7 +9,7 @@ import type { DiffPair } from '../types';
 type Tab = 'key' | 'zip' | 'dat'
 
 const emit = defineEmits<{
-  classifyKey: [key: string, pairs: DiffPair[], char: string, diff: string]
+  classifyKey: [key: string, char: string, diff: string]
   classifyZip: [buf: ArrayBuffer, char: string, diff: string, name: string]
   classifyDat: [buf: ArrayBuffer, bpm: number, name: string]
 }>()
@@ -29,17 +29,16 @@ const tabs: { id: Tab; label: string }[] = [
 ]
 
 // Key mode
-const mapKey         = ref('')
-const keyPairs       = ref<DiffPair[]>([])
-const keyChar        = ref('')
-const keyDiff        = ref('')
-const { pairs: lookupPairs, onKeyInput } = useBeatSaverLookup()
-
-function onKeyChange(v: string) { mapKey.value = v; onKeyInput(v); }
-function syncLookupPairs() { keyPairs.value = lookupPairs.value }
+const mapKey  = ref('')
+const keyChar = ref('')
+const keyDiff = ref('')
+const { pairs: keyPairs, onKeyInput } = useBeatSaverLookup()
 
 import { watch } from 'vue'
-watch(lookupPairs, v => { keyPairs.value = v })
+function onKeyChange(v: string) { mapKey.value = v; onKeyInput(v); }
+watch(keyPairs, pairs => {
+  if (pairs.length && !keyChar.value) keyChar.value = pairs[0].characteristic
+})
 
 // Zip mode
 const zipBuf         = ref<ArrayBuffer | null>(null)
@@ -73,7 +72,7 @@ async function onDatFile(file: File) {
 async function classify() {
   if (tab.value === 'key') {
     if (!mapKey.value.trim()) return
-    emit('classifyKey', mapKey.value.trim(), keyPairs.value, keyChar.value, keyDiff.value)
+    emit('classifyKey', mapKey.value.trim(), keyChar.value, keyDiff.value)
   } else if (tab.value === 'zip') {
     if (!zipBuf.value) return
     emit('classifyZip', zipBuf.value, zipChar.value, zipDiff.value, zipName.value)

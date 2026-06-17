@@ -3,8 +3,6 @@ import { useClassifier } from './composables/useClassifier';
 import InputPanel from './components/InputPanel.vue';
 import Loader     from './components/Loader.vue';
 import ResultPanel from './components/ResultPanel.vue';
-import type { DiffPair } from './types';
-
 const {
   ready, busy, loading, loadingText, status, isError, payload,
   classifyFromKey, classifyFromZip, classifyFromDat,
@@ -27,7 +25,7 @@ const {
       :busy="busy"
       :status="status"
       :is-error="isError"
-      @classify-key="(key: string, pairs: DiffPair[], char: string, diff: string) => classifyFromKey(key, pairs, char, diff)"
+      @classify-key="(key: string, char: string, diff: string) => classifyFromKey(key, char, diff)"
       @classify-zip="(buf: ArrayBuffer, char: string, diff: string, name: string) => classifyFromZip(buf, char, diff, name)"
       @classify-dat="(buf: ArrayBuffer, bpm: number, name: string) => classifyFromDat(buf, bpm, name)"
     />

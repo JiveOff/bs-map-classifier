@@ -1,11 +1,10 @@
 'use strict';
 
-import { unzipSync } from 'fflate';
 import {
-  parseBeatmap, findDatFilename,
   annotatePatterns, TYPE_LABELS,
   loadClassifierFromFetch, classifyFromNotes,
 } from 'bs-map-classifier';
+import { loadFromKey } from 'bs-map-classifier/beatsaver';
 import { getURL } from './platform.js';
 
 const TAG = '[BSO]';
@@ -293,63 +292,25 @@ async function autoLoadFromUrl() {
 }
 
 async function loadMapFromBeatSaver(id, difficulty, mode) {
-  setStatus(`Fetching map info for ${id}…`);
+  setStatus(`Fetching map ${id}…`);
 
-  const info = await fetch(`https://beatsaver.com/api/maps/id/${id}`)
-    .then(r => { if (!r.ok) throw new Error(`BeatSaver API ${r.status}`); return r.json(); });
+  const { beatmap, bpm, njs, njsOffset, songName, songAuthor, mapAuthor } =
+    await loadFromKey(id, mode, difficulty);
 
-  const meta    = info.metadata || {};
-  const bpm     = parseFloat(meta.bpm || 120);
-  const version = info.versions?.[info.versions.length - 1];
-  if (!version?.downloadURL) throw new Error('No download URL in API response');
+  const { notes, obstacles, arcs, chains, bombs } = beatmap;
+  console.log(TAG, `Parsed ${notes.length} notes, ${bombs.length} bombs, NJS ${njs}`);
 
   updateHeader({
-    name: meta.songName || id,
-    sub:  `${meta.songAuthorName || ''}  ·  ${difficulty}  ·  ${bpm} BPM`,
+    name: songName || id,
+    sub:  `${songAuthor}  ·  ${difficulty}  ·  ${bpm} BPM`,
   });
-
-  setStatus('Downloading map zip…');
-  console.log(TAG, `Fetching zip: ${version.downloadURL}`);
-  const zipResp = await fetch(version.downloadURL);
-  if (!zipResp.ok) throw new Error(`Download failed: ${zipResp.status}`);
-
-  // Use arrayBuffer() instead of blob() — sandbox environments (e.g. userscript)
-  // proxy Blob objects in a way that stalls JSZip; ArrayBuffer is always safe.
-  const zipBuffer = await zipResp.arrayBuffer();
-  console.log(TAG, `Downloaded ${(zipBuffer.byteLength / 1024).toFixed(0)} KB from ${zipResp.url}`);
-  if (zipBuffer.byteLength < 500) throw new Error(`Response too small (${zipBuffer.byteLength} B) — likely blocked by CDN CORS`);
-
-  // Verify ZIP magic bytes (PK = 0x504B)
-  const magic = new Uint8Array(zipBuffer, 0, 2);
-  if (magic[0] !== 0x50 || magic[1] !== 0x4B) {
-    throw new Error(`Response is not a ZIP file (magic: ${magic[0].toString(16)} ${magic[1].toString(16)}) — possibly a CORS/auth error page`);
-  }
-  console.log(TAG, 'ZIP magic OK — parsing with fflate.unzipSync');
-
-  setStatus('Parsing beatmap…');
-  // unzipSync is fully synchronous — no Promises, no DecompressionStream, no timers.
-  // Works reliably inside Tampermonkey / Violentmonkey sandboxes.
-  const zipEntries = unzipSync(new Uint8Array(zipBuffer));
-  console.log(TAG, `Unzipped ${Object.keys(zipEntries).length} entries`);
-
-  const infoRaw = readZipEntry(zipEntries, 'Info.dat') || readZipEntry(zipEntries, 'info.dat');
-  if (!infoRaw) throw new Error('Info.dat not found in zip');
-  const infoDat = JSON.parse(infoRaw);
-
-  const datFilename = findDatFilename(infoDat, mode, difficulty);
-  console.log(TAG, `Loading .dat file: ${datFilename}`);
-  const datRaw = readZipEntry(zipEntries, datFilename);
-  if (!datRaw) throw new Error(`${datFilename} not found in zip`);
-
-  const { notes, obstacles, arcs, chains, bombs } = parseBeatmap(JSON.parse(datRaw));
-  console.log(TAG, `Parsed ${notes.length} notes, ${bombs.length} bombs`);
 
   setStatus('Detecting patterns…');
   const annotation = annotatePatterns(notes, bpm, {
     id, difficulty, mode, bpm,
-    title:  meta.songName        || id,
-    artist: meta.songAuthorName  || '',
-    mapper: meta.levelAuthorName || '',
+    title:  songName  || id,
+    artist: songAuthor || '',
+    mapper: mapAuthor  || '',
   });
 
   console.log(TAG, `Detected ${annotation.patterns.length} pattern instances`);
@@ -361,18 +322,13 @@ async function loadMapFromBeatSaver(id, difficulty, mode) {
   loadClassifierModels().then(async ready => {
     if (!ready) return;
     try {
-      const result = await classifyFromNotes(notes, obstacles, arcs, chains, bpm, bombs, _clf);
+      const result = await classifyFromNotes(notes, obstacles, arcs, chains, bpm, bombs, _clf, njs, njsOffset);
       console.log(TAG, `ONNX predicted: ${result.category} (${(result.confidence * 100).toFixed(1)}%)`);
       showPrediction(result.category, result.confidence);
     } catch (e) {
       console.error(TAG, 'ONNX inference error:', e);
     }
   });
-}
-
-function readZipEntry(entries, name) {
-  const data = entries[name] ?? entries[name.toLowerCase()];
-  return data ? new TextDecoder().decode(data) : null;
 }
 
 // ── 6. Data init ──────────────────────────────────────────────────────────

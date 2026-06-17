@@ -80,6 +80,16 @@
         "default": "./dist/cjs/classify.node.js"
       }
     },
+    "./beatsaver": {
+      "import": {
+        "types": "./types/index.d.ts",
+        "default": "./src/beatsaver.js"
+      },
+      "require": {
+        "types": "./dist/cjs/index.d.ts",
+        "default": "./dist/cjs/beatsaver.js"
+      }
+    },
     "./embedded": {
       "node": {
         "import": {
@@ -143,6 +153,7 @@
     "esbuild": "^0.28.1"
   },
   "dependencies": {
-    "bsmap": "^2.3.5"
+    "bsmap": "^2.3.5",
+    "fflate": "^0.8.3"
   }
 }

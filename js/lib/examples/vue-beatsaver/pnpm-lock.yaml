@@ -455,7 +455,7 @@ packages:
     resolution: {integrity: sha512-WR1cURNjuvBLMZBMbqM0UoE+WAfdUcEV1ccD8PVBVOI+Z3ND4+SZbN8RsfT2bMuG1qwz5RFvPukSZm5fF2D5eA==}
 
   bs-map-classifier@file:../../bs-map-classifier-0.1.0.tgz:
-    resolution: {integrity: sha512-3f8DdC6Loyfm6tFkjbvwuki7MRlF6GfpbzJsyuVZnVGMDhLJUD/sfP3VqYXHCxWnCXsuHW42/x/vP+jN2i68YA==, tarball: file:../../bs-map-classifier-0.1.0.tgz}
+    resolution: {integrity: sha512-n/HwJIdr0wYxR1bYjVx+z7/0Adk/q2q2HJbDreVnyKaHnhFdSPx2oWMQDlJSj9Q5IYBw7pMPG+ujYbkeIrPKvQ==, tarball: file:../../bs-map-classifier-0.1.0.tgz}
     version: 0.1.0
     engines: {node: '>=18.0.0'}
     peerDependencies:
@@ -947,6 +947,7 @@ snapshots:
   bs-map-classifier@file:../../bs-map-classifier-0.1.0.tgz(onnxruntime-web@1.26.0)(typescript@5.9.3):
     dependencies:
       bsmap: 2.3.5(typescript@5.9.3)
+      fflate: 0.8.3
     optionalDependencies:
       onnxruntime-web: 1.26.0
     transitivePeerDependencies:

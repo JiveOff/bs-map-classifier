@@ -418,7 +418,8 @@
     ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/';
     ort.env.wasm.numThreads = 1;
 
-    import { setOrtInstance, parseBeatmap, findDatFilename, extractPatternsAndClassifyMap } from 'https://esm.sh/bs-map-classifier';
+    import { setOrtInstance, parseBeatmap, findDatInfo, extractPatternsAndClassifyMap } from 'https://esm.sh/bs-map-classifier@1.1.2';
+    import { loadFromKey } from 'https://esm.sh/bs-map-classifier@1.1.2/beatsaver';
     import { unzipSync } from 'https://esm.sh/fflate';
 
     setOrtInstance(ort);
@@ -431,7 +432,7 @@
     let classifierPromise = null;
     function getClassifier() {
       if (!classifierPromise)
-        classifierPromise = import('https://esm.sh/bs-map-classifier/embedded').then(m => m.loadEmbeddedClassifier());
+        classifierPromise = import('https://esm.sh/bs-map-classifier@1.1.2/embedded').then(m => m.loadEmbeddedClassifier());
       return classifierPromise;
     }
 
@@ -601,32 +602,19 @@
       const key  = $('mapKey').value.trim().toLowerCase();
       if (!key) throw new Error('enter a map key first');
 
+      const char = $('key-characteristic').disabled ? 'Standard' : $('key-characteristic').value;
+      const diff = $('key-difficulty').disabled     ? undefined   : $('key-difficulty').value;
+
       setLoading(true, 'FETCHING MAP');
-      const info    = await fetchBSInfo(key);
-      const version = info.versions.at(-1);
-
-      // Populate selects if not yet done (user clicked without waiting for debounce)
-      if ($('key-characteristic').disabled) {
-        const pairs = version.diffs.map(d => ({ characteristic: d.characteristic, difficulty: d.difficulty }));
-        populateSelects($('key-characteristic'), $('key-difficulty'), pairs);
-      }
-
-      const char = $('key-characteristic').value;
-      const diff = $('key-difficulty').value;
-      const chosen = version.diffs.find(d => d.characteristic === char && d.difficulty === diff)
-                  ?? [...version.diffs].sort((a, b) => (RANK[b.difficulty] ?? 0) - (RANK[a.difficulty] ?? 0))[0];
-
-      setLoading(true, 'DOWNLOADING ZIP');
-      const buf = await fetch(`https://cdn.beatsaver.com/${version.hash}.zip`).then(r => r.arrayBuffer());
+      const { beatmap, bpm, njs, njsOffset, songName, songAuthor, mapAuthor, characteristic, difficulty } =
+        await loadFromKey(key, char, diff);
 
       setLoading(true, 'CLASSIFYING');
-      const { datJson, njs, njsOffset } = extractDat(buf, chosen.characteristic, chosen.difficulty);
-      const beatmap = parseBeatmap(datJson);
-      const result  = await extractPatternsAndClassifyMap(beatmap, info.metadata.bpm, clf, {}, njs, njsOffset);
+      const result = await extractPatternsAndClassifyMap(beatmap, bpm, clf);
 
       setLoading(false);
-      const meta = `<strong>${info.metadata.songName}</strong> — ${info.metadata.songAuthorName}<br>` +
-                   `mapped by ${info.metadata.levelAuthorName} · ${chosen.characteristic} / ${chosen.difficulty} · ${info.metadata.bpm} BPM`;
+      const meta = `<strong>${songName}</strong> — ${songAuthor}<br>` +
+                   `mapped by ${mapAuthor} · ${characteristic} / ${difficulty} · ${bpm} BPM`;
       renderResults(meta, result);
     }
 
@@ -640,7 +628,7 @@
 
       setLoading(true, 'READING ZIP');
       const buf  = zipBuf ?? await readFile(file);
-      const { datJson, infoDat, bpm } = extractDat(buf, char, diff);
+      const { datJson, infoDat, bpm, njs, njsOffset } = extractDat(buf, char, diff);
 
       setLoading(true, 'CLASSIFYING');
       const beatmap = parseBeatmap(datJson);
@@ -678,30 +666,10 @@
       if (!infoRaw) throw new Error('Info.dat not found in zip');
       const infoDat = JSON.parse(decode(infoRaw));
 
-      const bpm      = infoDat._beatsPerMinute ?? null;
-      const datName  = findDatFilename(infoDat, char, diff);
-      const datRaw   = getFile(datName);
-      if (!datRaw) throw new Error(`"${datName}" not found in zip — check characteristic/difficulty`);
-
-      // Extract NJS + offset from Info.dat (v2: _noteJumpMovementSpeed, v4: noteJumpMovementSpeed)
-      const cLow = char.toLowerCase(), dLow = diff.toLowerCase();
-      let njs = 0, njsOffset = 0;
-      for (const s of infoDat._difficultyBeatmapSets ?? []) {
-        if ((s._beatmapCharacteristicName ?? '').toLowerCase() !== cLow) continue;
-        for (const d of s._difficultyBeatmaps ?? []) {
-          if ((d._difficulty ?? '').toLowerCase() === dLow) {
-            njs = parseFloat(d._noteJumpMovementSpeed) || 0;
-            njsOffset = parseFloat(d._noteJumpStartBeatOffset) || 0;
-          }
-        }
-      }
-      for (const d of infoDat.difficultyBeatmaps ?? []) {
-        if ((d.characteristic ?? '').toLowerCase() === cLow &&
-            (d.difficulty ?? '').toLowerCase() === dLow) {
-          njs = parseFloat(d.noteJumpMovementSpeed) || 0;
-          njsOffset = parseFloat(d.noteJumpStartBeatOffset) || 0;
-        }
-      }
+      const bpm = infoDat._beatsPerMinute ?? null;
+      const { filename, njs, njsOffset } = findDatInfo(infoDat, char, diff);
+      const datRaw = getFile(filename);
+      if (!datRaw) throw new Error(`"${filename}" not found in zip — check characteristic/difficulty`);
 
       return { datJson: JSON.parse(decode(datRaw)), infoDat, bpm, njs, njsOffset };
     }

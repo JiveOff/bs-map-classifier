@@ -1,11 +1,7 @@
-import * as ort from 'onnxruntime-web';
-import { setOrtInstance, setWasmPaths, extractPatternsAndClassifyMap } from 'bs-map-classifier';
+import { extractPatternsAndClassifyMap } from 'bs-map-classifier';
 import { loadFromKey } from 'bs-map-classifier/beatsaver';
 import { loadEmbeddedClassifier } from 'bs-map-classifier/embedded';
 import type { MapAnalysisResult } from 'bs-map-classifier';
-
-await setWasmPaths(new URL('./node_modules/onnxruntime-web/dist/', import.meta.url).href);
-setOrtInstance(ort, 'wasm');
 
 const MAP_KEY        = '2b120';
 const CHARACTERISTIC = 'Standard';
@@ -24,9 +20,7 @@ const { classification, features, patterns }: MapAnalysisResult =
   await extractPatternsAndClassifyMap(beatmap, bpm, classifier);
 
 console.log(`\n"${songName}" by ${songAuthor} — ${CHARACTERISTIC}/${DIFFICULTY}`);
-console.log(`Category:   ${classification.category}`);
-console.log(`Confidence: ${(classification.confidence * 100).toFixed(1)}%`);
-console.log('');
+console.log(`Category: ${classification.category} (${(classification.confidence * 100).toFixed(1)}%)`);
 for (const [cls, p] of Object.entries(classification.probabilities).sort((a, b) => b[1] - a[1])) {
   const bar = '█'.repeat(Math.round(p * 20)).padEnd(20, '░');
   console.log(`  ${cls.padEnd(10)} ${bar} ${(p * 100).toFixed(1)}%`);

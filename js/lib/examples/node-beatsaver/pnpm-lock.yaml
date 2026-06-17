@@ -9,11 +9,8 @@ importers:
   .:
     dependencies:
       bs-map-classifier:
-        specifier: ^1.1.1
-        version: 1.1.1(onnxruntime-node@1.26.0)
-      fflate:
-        specifier: ^0.8.3
-        version: 0.8.3
+        specifier: file:../../bs-map-classifier-0.1.0.tgz
+        version: file:../../bs-map-classifier-0.1.0.tgz(onnxruntime-node@1.26.0)
       onnxruntime-node:
         specifier: ^1.19.0
         version: 1.26.0
@@ -27,8 +24,9 @@ packages:
     resolution: {integrity: sha512-+Ut8d9LLqwEvHHJl1+PIHqoyDxFgVN847JTVM3Izi3xHDWPE4UtzzXysMZQs64DMcrJfBeS/uoEP4AD3HQHnQQ==}
     engines: {node: '>=12.0'}
 
-  bs-map-classifier@1.1.1:
-    resolution: {integrity: sha512-yJoG1QcXRcwvjuAZEaIpejSeUZ5aVI1KHE2qPQBUj5n4OaQr+UoPU1LXO4aW40Gh0IwIeaHS7WmRa2UTddkXfQ==}
+  bs-map-classifier@file:../../bs-map-classifier-0.1.0.tgz:
+    resolution: {integrity: sha512-n/HwJIdr0wYxR1bYjVx+z7/0Adk/q2q2HJbDreVnyKaHnhFdSPx2oWMQDlJSj9Q5IYBw7pMPG+ujYbkeIrPKvQ==, tarball: file:../../bs-map-classifier-0.1.0.tgz}
+    version: 0.1.0
     engines: {node: '>=18.0.0'}
     peerDependencies:
       onnxruntime-node: '>=1.17.0'
@@ -122,9 +120,10 @@ snapshots:
 
   adm-zip@0.5.17: {}
 
-  bs-map-classifier@1.1.1(onnxruntime-node@1.26.0):
+  bs-map-classifier@file:../../bs-map-classifier-0.1.0.tgz(onnxruntime-node@1.26.0):
     dependencies:
       bsmap: 2.3.5
+      fflate: 0.8.3
     optionalDependencies:
       onnxruntime-node: 1.26.0
     transitivePeerDependencies:

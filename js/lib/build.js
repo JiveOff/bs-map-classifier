@@ -56,6 +56,7 @@ await esbuild.build({
     'src/parser.js',
     'src/features.js',
     'src/patterns.js',
+    'src/beatsaver.js',
   ],
   format: 'cjs',
   platform: 'node',

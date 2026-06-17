@@ -9,7 +9,7 @@
     "typecheck": "vue-tsc --noEmit"
   },
   "dependencies": {
-    "bs-map-classifier": "^1.1.1",
+    "bs-map-classifier": "^1.1.2",
     "fflate": "^0.8.3",
     "onnxruntime-web": "^1.26.0",
     "vue": "^3.5.0"

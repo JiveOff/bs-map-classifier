@@ -1,7 +1,6 @@
 import * as ort from 'onnxruntime-web';
-import { unzipSync } from 'fflate';
-import { parseBeatmap, extractPatternsAndClassifyMap } from 'bs-map-classifier';
-import { findDatInfo } from 'bs-map-classifier/parser';
+import { extractPatternsAndClassifyMap } from 'bs-map-classifier';
+import { loadFromKey } from 'bs-map-classifier/beatsaver';
 import { loadEmbeddedClassifier } from 'bs-map-classifier/embedded';
 
 ort.env.wasm.numThreads = 1;
@@ -43,36 +42,19 @@ btn.addEventListener('click', async () => {
   status.textContent = `Fetching map ${mapKey}…`;
 
   try {
-    const info = await fetch(`https://beatsaver.com/api/maps/id/${mapKey}`)
-      .then(r => { if (!r.ok) throw new Error(`BeatSaver ${r.status}`); return r.json(); });
-
-    const version = info.versions.at(-1);
-    status.textContent = `Downloading "${info.metadata.songName}"…`;
-
-    const zipBuf = await fetch(`https://cdn.beatsaver.com/${version.hash}.zip`)
-      .then(r => { if (!r.ok) throw new Error(`CDN ${r.status}`); return r.arrayBuffer(); });
-    const zip = unzipSync(new Uint8Array(zipBuf));
-
-    const getEntry = name => {
-      const key = Object.keys(zip).find(k => k.toLowerCase() === name.toLowerCase());
-      return key ? zip[key] : null;
-    };
-
-    const infoDat = JSON.parse(new TextDecoder().decode(getEntry('Info.dat') ?? getEntry('info.dat')));
-    const { filename, njs, njsOffset } = findDatInfo(infoDat, 'Standard', difficulty);
-    const datFile = JSON.parse(new TextDecoder().decode(getEntry(filename)));
+    const { beatmap, bpm, songName, songAuthor, characteristic, njs } =
+      await loadFromKey(mapKey, 'Standard', difficulty);
 
     status.textContent = 'Classifying…';
 
-    const { classification, features, patterns } = await extractPatternsAndClassifyMap(
-      { ...parseBeatmap(datFile), njs, njsOffset }, info.metadata.bpm, classifier,
-    );
+    const { classification, features, patterns } =
+      await extractPatternsAndClassifyMap(beatmap, bpm, classifier);
 
     const cat   = classification.category;
     const color = COLORS[cat] ?? '#888';
 
     document.getElementById('song').textContent =
-      `"${info.metadata.songName}" by ${info.metadata.songAuthorName} — Standard/${difficulty}`;
+      `"${songName}" by ${songAuthor} — ${characteristic}/${difficulty}`;
 
     const badge = document.getElementById('badge');
     badge.textContent = `${cat} · ${(classification.confidence * 100).toFixed(1)}%`;
@@ -91,7 +73,7 @@ btn.addEventListener('click', async () => {
       .join('');
 
     document.getElementById('meta').innerHTML = [
-      `NJS <span>${features.njs ?? '—'}</span>`,
+      `NJS <span>${njs ?? '—'}</span>`,
       `JD <span>${features.jump_distance?.toFixed(2) ?? '—'}</span>`,
       `RT <span>${features.reaction_time ? (features.reaction_time * 1000).toFixed(0) + 'ms' : '—'}</span>`,
       `NPS <span>${features.nps_mapped?.toFixed(2) ?? '—'}</span>`,

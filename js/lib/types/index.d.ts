@@ -254,6 +254,45 @@ export function parseMap(
   meta?:         object,
 ): Promise<PatternResult | MapAnalysisResult>;
 
+// ── BeatSaver helpers (bs-map-classifier/beatsaver) ──────────────────────────
+
+export interface BeatSaverResult {
+  /** Parsed beatmap with njs and njsOffset pre-set — pass directly to extractPatternsAndClassifyMap. */
+  beatmap:        ParsedBeatmap & { njs: number; njsOffset: number };
+  bpm:            number;
+  njs:            number;
+  njsOffset:      number;
+  characteristic: string;
+  difficulty:     string;
+  songName:       string;
+  songAuthor:     string;
+  mapAuthor:      string;
+}
+
+/**
+ * Download and parse a Beat Saber map by its BeatSaver short key (e.g. "2b120").
+ * Defaults to Standard / highest available difficulty when omitted.
+ *
+ * Exported from the `bs-map-classifier/beatsaver` subpath.
+ */
+export function loadFromKey(
+  key:             string,
+  characteristic?: string,
+  difficulty?:     string,
+): Promise<BeatSaverResult>;
+
+/**
+ * Download and parse a Beat Saber map by its zip hash.
+ * Metadata is fetched from the BeatSaver API when available.
+ *
+ * Exported from the `bs-map-classifier/beatsaver` subpath.
+ */
+export function loadFromHash(
+  hash:            string,
+  characteristic?: string,
+  difficulty?:     string,
+): Promise<BeatSaverResult>;
+
 // ── Embedded model (bs-map-classifier/embedded) ───────────────────────────────
 
 /**
