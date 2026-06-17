@@ -2,17 +2,19 @@
 
 ML classifier for Beat Saber custom maps into 5 categories: **Tech**, **Speed**, **Accuracy**, **Standard**, **Extreme**.
 
-The primary signal comes from note-level pattern features extracted directly from `.dat` map files — what a player actually has to hit, not summary metadata. The ONNX classifier reaches **88.89% accuracy / 85.13% CV F1** (125 features including NJS, NPS, SPS via bsmap, LightGBM + Optuna-tuned, exported via onnxmltools). It runs entirely in browser and Node.js with no BeatSaver metadata API required.
+Classification is driven by note-level features extracted directly from `.dat` map files — 125 features covering pattern statistics, NJS, NPS, and SPS — trained with LightGBM + Optuna (**88.89% accuracy / 85.13% CV F1**). The ONNX model runs entirely in-browser and in Node.js from the raw map zip, with no BeatSaver API calls required.
 
 ## Categories
 
-| Category | Characteristics |
-|----------|----------------|
-| **Tech** | Complex patterns, crossovers, high wall count, parity resets |
-| **Speed** | High NPS/eBPM, linear swings, fast streams |
-| **Accuracy** | Precision-focused, high rbRatio, arc-heavy |
-| **Standard** | Balanced, conventional mapping |
-| **Extreme** | Highest difficulty across all metrics — high NPS + complexity |
+These are *typical* characteristics — categories are not rigidly defined and a map may blend several traits.
+
+| Category | Typical characteristics |
+|----------|------------------------|
+| **Tech** | Crossovers, parity breaks (DDs), triangles, inlines, high wall density, unconventional patterns |
+| **Speed** | Dense streams, high eBPM, fast jumps |
+| **Accuracy** | Structured swings, low parity breaks, emphasis on precision scoring |
+| **Standard** | Balanced mix of patterns, moderate density, approachable flow |
+| **Extreme** | Very high density and difficulty — towers, quads, walls, complex patterns at high speed |
 
 ## Dataset & limitations
 
@@ -36,11 +38,11 @@ pnpm add bs-map-classifier onnxruntime-web
 
 ```js
 import { loadFromKey } from 'bs-map-classifier/beatsaver';
-import { loadEmbeddedClassifier, extractPatternsAndClassifyMap } from 'bs-map-classifier/embedded';
+import { loadEmbeddedClassifier, classifyMap } from 'bs-map-classifier/embedded';
 
 const clf = await loadEmbeddedClassifier();
 const { beatmap, bpm, songName } = await loadFromKey('2b120');
-const { classification } = await extractPatternsAndClassifyMap(beatmap, bpm, clf);
+const classification = await classifyMap(beatmap, bpm, clf);
 console.log(`${songName} → ${classification.category} (${(classification.confidence * 100).toFixed(1)}%)`);
 ```
 
@@ -64,6 +66,8 @@ See [`js/lib/README.md`](js/lib/README.md) for the full API, and [`js/lib/exampl
 ## Using the overlay
 
 `bs-pattern-overlay` is a browser extension and userscript that runs on top of Beat Saber map viewers. It auto-detects the current map, downloads the zip from BeatSaver, and overlays a scrollable pattern timeline synced to playback — powered by the same classifier.
+
+> **Note:** The individual pattern detector (the timeline labels like "stream", "crossover", "double", etc.) is **work-in-progress and not yet accurate**. The map-level category classification is separate and not affected.
 
 ![Pattern overlay](docs/overlay.png)
 
