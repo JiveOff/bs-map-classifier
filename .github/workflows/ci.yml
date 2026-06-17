@@ -79,21 +79,7 @@ jobs:
 
       - name: Unit tests (ESM)
         working-directory: js/lib
-        continue-on-error: true
-        run: |
-          node --test \
-            --test-reporter=spec --test-reporter-destination=stdout \
-            --test-reporter=tap  --test-reporter-destination=test-results.tap \
-            tests/*.test.js
-
-      - name: Publish test results
-        uses: dorny/test-reporter@v1
-        if: always()
-        with:
-          name: Unit Tests — Node ${{ matrix.node }}
-          path: js/lib/test-results.tap
-          reporter: tap
-          fail-on-error: true
+        run: node --test --test-reporter=spec tests/*.test.js
 
       - name: Smoke test — CJS (require)
         working-directory: js/lib
@@ -156,8 +142,11 @@ jobs:
 
           assert labels.shape == (1,),   f'Unexpected label shape: {labels.shape}'
           assert probs.shape  == (1, 5), f'Unexpected prob shape: {probs.shape}'
-          assert labels[0] in meta['classes'], f'Unknown class: {labels[0]}'
+          # labels[0] is an integer class index (0–4); look it up in meta['classes']
+          class_idx = int(labels[0])
+          assert 0 <= class_idx < len(meta['classes']), f'Class index out of range: {class_idx}'
           assert abs(probs[0].sum() - 1.0) < 1e-4, 'Probabilities do not sum to 1'
 
-          print(f'OK — {n} features, prediction: {labels[0]} ({probs[0].max():.1%})')
+          predicted = meta['classes'][class_idx]
+          print(f'OK — {n} features, prediction: {predicted} ({probs[0].max():.1%})')
           EOF

@@ -7,7 +7,6 @@ on:
 
 permissions:
   contents: read
-  checks: write
 
 jobs:
   integration:
@@ -35,17 +34,4 @@ jobs:
         working-directory: js/lib
         env:
           INTEGRATION: '1'
-        run: |
-          node --test \
-            --test-reporter=spec --test-reporter-destination=stdout \
-            --test-reporter=tap  --test-reporter-destination=test-results.tap \
-            tests/integration.test.js
-
-      - name: Publish test results
-        uses: dorny/test-reporter@v1
-        if: always()
-        with:
-          name: Integration Tests — BeatSaver
-          path: js/lib/test-results.tap
-          reporter: tap
-          fail-on-error: true
+        run: node --test --test-reporter=spec tests/integration.test.js
