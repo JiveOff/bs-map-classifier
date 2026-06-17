@@ -13,34 +13,82 @@
   "types": "types/index.d.ts",
   "exports": {
     ".": {
-      "node":    {
-        "import":  { "types": "./types/index.d.ts",    "default": "./src/index.node.js" },
-        "require": { "types": "./dist/cjs/index.d.ts", "default": "./dist/cjs/index.js" }
+      "node": {
+        "import": {
+          "types": "./types/index.d.ts",
+          "default": "./src/index.node.js"
+        },
+        "require": {
+          "types": "./dist/cjs/index.d.ts",
+          "default": "./dist/cjs/index.js"
+        }
       },
-      "browser": { "types": "./types/index.d.ts",      "default": "./src/index.browser.js" },
-      "import":  { "types": "./types/index.d.ts",      "default": "./src/index.js" },
-      "require": { "types": "./dist/cjs/index.d.ts",   "default": "./dist/cjs/index.js" }
+      "browser": {
+        "types": "./types/index.d.ts",
+        "default": "./src/index.browser.js"
+      },
+      "import": {
+        "types": "./types/index.d.ts",
+        "default": "./src/index.js"
+      },
+      "require": {
+        "types": "./dist/cjs/index.d.ts",
+        "default": "./dist/cjs/index.js"
+      }
     },
     "./parser": {
-      "import":  { "types": "./types/index.d.ts",      "default": "./src/parser.js" },
-      "require": { "types": "./dist/cjs/index.d.ts",   "default": "./dist/cjs/parser.js" }
+      "import": {
+        "types": "./types/index.d.ts",
+        "default": "./src/parser.js"
+      },
+      "require": {
+        "types": "./dist/cjs/index.d.ts",
+        "default": "./dist/cjs/parser.js"
+      }
     },
     "./features": {
-      "import":  { "types": "./types/index.d.ts",      "default": "./src/features.js" },
-      "require": { "types": "./dist/cjs/index.d.ts",   "default": "./dist/cjs/features.js" }
+      "import": {
+        "types": "./types/index.d.ts",
+        "default": "./src/features.js"
+      },
+      "require": {
+        "types": "./dist/cjs/index.d.ts",
+        "default": "./dist/cjs/features.js"
+      }
     },
     "./classify": {
-      "node":    {
-        "import":  { "types": "./types/index.d.ts",    "default": "./src/classify.node.js" },
-        "require": { "types": "./dist/cjs/index.d.ts", "default": "./dist/cjs/classify.node.js" }
+      "node": {
+        "import": {
+          "types": "./types/index.d.ts",
+          "default": "./src/classify.node.js"
+        },
+        "require": {
+          "types": "./dist/cjs/index.d.ts",
+          "default": "./dist/cjs/classify.node.js"
+        }
       },
-      "browser": { "types": "./types/index.d.ts",      "default": "./src/classify.browser.js" },
-      "import":  { "types": "./types/index.d.ts",      "default": "./src/classify.js" },
-      "require": { "types": "./dist/cjs/index.d.ts",   "default": "./dist/cjs/classify.node.js" }
+      "browser": {
+        "types": "./types/index.d.ts",
+        "default": "./src/classify.browser.js"
+      },
+      "import": {
+        "types": "./types/index.d.ts",
+        "default": "./src/classify.js"
+      },
+      "require": {
+        "types": "./dist/cjs/index.d.ts",
+        "default": "./dist/cjs/classify.node.js"
+      }
     },
     "./embedded": {
-      "import":  { "types": "./types/index.d.ts",      "default": "./dist/embedded.mjs" },
-      "require": { "types": "./dist/cjs/embedded.d.ts","default": "./dist/cjs/embedded.js" }
+      "import": {
+        "types": "./types/index.d.ts",
+        "default": "./dist/embedded.mjs"
+      },
+      "require": {
+        "types": "./dist/cjs/embedded.d.ts",
+        "default": "./dist/cjs/embedded.js"
+      }
     }
   },
   "browser": {
@@ -83,5 +131,8 @@
   },
   "devDependencies": {
     "esbuild": "^0.28.1"
+  },
+  "dependencies": {
+    "bsmap": "^2.3.5"
   }
 }

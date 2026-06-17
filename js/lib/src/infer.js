@@ -18,10 +18,10 @@ export function preprocess(vec, meta) {
   return vec;
 }
 
-export async function classifyFromNotes(notes, obstacles, arcs, chains, bpm, bombs = [], classifier) {
+export async function classifyFromNotes(notes, obstacles, arcs, chains, bpm, bombs = [], classifier, njs = 0, njsOffset = 0) {
   const { session, meta, ort } = classifier;
 
-  const featureMap = computeFeatures(notes, obstacles, arcs, chains, bpm, bombs);
+  const featureMap = computeFeatures(notes, obstacles, arcs, chains, bpm, bombs, njs, njsOffset);
   const rawVec     = toFeatureVector(featureMap, meta.features);
   preprocess(rawVec, meta);
 

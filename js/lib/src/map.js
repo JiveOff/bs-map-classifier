@@ -26,18 +26,18 @@ export function extractPatterns(parsedBeatmap, bpm, meta = {}) {
 }
 
 /** Classify a parsed beatmap into a category. */
-export async function classifyMap(parsedBeatmap, bpm, classifier) {
+export async function classifyMap(parsedBeatmap, bpm, classifier, njs = 0, njsOffset = 0) {
   const { notes, obstacles, arcs, chains, bombs } = _unpack(parsedBeatmap);
-  return classifyFromNotes(notes, obstacles, arcs, chains, bpm, bombs, classifier);
+  return classifyFromNotes(notes, obstacles, arcs, chains, bpm, bombs, classifier, njs, njsOffset);
 }
 
 /** Extract pattern features, named pattern events, and classify in one call. */
-export async function extractPatternsAndClassifyMap(parsedBeatmap, bpm, classifier, meta = {}) {
+export async function extractPatternsAndClassifyMap(parsedBeatmap, bpm, classifier, meta = {}, njs = 0, njsOffset = 0) {
   const { notes, obstacles, arcs, chains, bombs } = _unpack(parsedBeatmap);
   const annotation = annotatePatterns(notes, bpm, meta);
   const [features, classification] = await Promise.all([
-    computeFeatures(notes, obstacles, arcs, chains, bpm, bombs),
-    classifyFromNotes(notes, obstacles, arcs, chains, bpm, bombs, classifier),
+    computeFeatures(notes, obstacles, arcs, chains, bpm, bombs, njs, njsOffset),
+    classifyFromNotes(notes, obstacles, arcs, chains, bpm, bombs, classifier, njs, njsOffset),
   ]);
   return {
     features,

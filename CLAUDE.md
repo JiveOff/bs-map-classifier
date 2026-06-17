@@ -20,32 +20,43 @@ brew install libomp  # macOS only, required for XGBoost
 ## Commands
 
 ```bash
-# 1. Extract metadata features from the CSV
-python src/data/features_v2.py --csv dataset_wc_pooling.csv --output data/processed/features.csv --analyze
-
-# Quick test run (first 100 rows only)
-python src/data/features_v2.py --csv dataset_wc_pooling.csv --output data/processed/features.csv --test
-
-# 2. Download actual map zips from BeatSaver (required for pattern features)
+# 1. Download actual map zips from BeatSaver (required for pattern features)
 python src/data/downloader.py --csv dataset_wc_pooling.csv --output data/raw/maps
 python src/data/downloader.py --csv dataset_wc_pooling.csv --output data/raw/maps --limit 50
 python src/data/downloader.py --csv dataset_wc_pooling.csv --output data/raw/maps --category Speed
 
-# 3. Parse downloaded maps and extract statistical features (eBPM, rotation, histograms, etc.)
+# 2. Parse downloaded maps and extract statistical features (eBPM, rotation, histograms, etc.)
 python src/data/map_parser.py --maps data/raw/maps --output data/processed/pattern_features.csv
 
-# 4. Run JS annotator to extract named pattern counts (n_doubles, n_hooks, etc.)
-#    Requires Node.js ≥18. Merges JS counts with map_parser.py statistical features.
+# 3. Run JS annotator to extract named pattern counts + NJS/NPS/SPS features.
+#    Requires Node.js ≥18 and `pnpm install` in js/lib/.
+#    Merges JS output with map_parser.py statistical features.
 python src/data/pattern_features_js.py \
     --maps data/raw/maps \
     --base-features data/processed/pattern_features.csv \
     --output data/processed/pattern_features_merged.csv
 
-# 5. Train all baseline models
-python src/models/baseline.py --features data/processed/pattern_features_merged.csv --output models/baseline_models --cross_validate
+# 4. Train all baseline models (parallelised, ~13 s)
+python src/models/baseline.py \
+    --features data/processed/pattern_features_merged.csv \
+    --output models/baseline_models \
+    --cross_validate
+
+# 5. Hyperparameter tuning with Optuna (100 trials per model, 5-fold CV folds parallelised)
+#    Tunes: LightGBM, XGBoost, RandomForest, GradientBoosting
+python src/models/tune.py \
+    --features data/processed/pattern_features_merged.csv \
+    --trials 100
+
+# 6. Export best model to ONNX (used by the JS/browser inference pipeline)
+python src/models/export_onnx.py --maps data/raw/maps
 ```
 
-No test suite exists yet (`tests/` is empty). `notebooks/` is empty and reserved for Jupyter exploration.
+JS library tests (run from `js/lib/`):
+```bash
+pnpm install          # install bsmap + dev deps
+node --test tests/*.test.js
+```
 
 ## Architecture
 
@@ -53,9 +64,6 @@ No test suite exists yet (`tests/` is empty). `notebooks/` is empty and reserved
 
 ```
 dataset_wc_pooling.csv (529 maps, with header row)
-    │
-    ├─► src/data/features_v2.py ──► data/processed/features.csv
-    │   (metadata features: NPS, SPS, NJS, parity, etc.)
     │
     └─► src/data/downloader.py ──► data/raw/maps/<category>/<key>/
         (downloads .zip from BeatSaver, extracts all difficulties,
@@ -65,16 +73,28 @@ dataset_wc_pooling.csv (529 maps, with header row)
             │   (statistical features only: eBPM, rotation, lane/layer histograms,
             │    timing CV, windowed features, obstacle/arc density)
             │
-            ├─► js/lib/scripts/annotate_batch.js  (Node.js)
-            │   (canonical JS pattern annotator → per-map named pattern counts:
-            │    n_double, n_hook, n_inline, n_vision_block, etc.)
+            ├─► js/lib/scripts/annotate_batch.js  (Node.js, uses bsmap)
+            │   (canonical JS annotator → named pattern counts + NJS/NPS/SPS geometry:
+            │    n_double, n_hook, n_inline, njs, jump_distance, reaction_time,
+            │    nps_mapped, peak_nps_4/8/16beat, sps_total/red/blue_{avg,median,peak})
             │
             └─► src/data/pattern_features_js.py
-                (calls annotate_batch.js, merges JS counts + map_parser stats)
+                (calls annotate_batch.js, merges JS output + map_parser stats)
                     │
                     └─► data/processed/pattern_features_merged.csv
                             │
-                            └─► src/models/baseline.py ──► models/baseline_models/*.pkl
+                            ├─► src/models/baseline.py ──► models/baseline_models/*.pkl
+                            │   (7 models, parallelised, ~13 s)
+                            │
+                            └─► src/models/tune.py ──► models/tuned/*.pkl
+                                (Optuna TPE, 100 trials, 5-fold CV folds parallel)
+                                    │
+                                    └─► src/models/export_onnx.py
+                                        (GradientBoosting → skl2onnx
+                                         LightGBM/XGBoost → onnxmltools opset 15)
+                                             │
+                                             └─► models/onnx/pattern_classifier.onnx
+                                                 js/lib/models/pattern_classifier.onnx
 ```
 
 ### CSV Column Names
@@ -132,9 +152,18 @@ Parses the actual `.dat` beatmap file and computes **signal-level statistical fe
 
 **eBPM formula**: `ebpm = bpm * 0.5 / per_hand_interval_beats` — at 1/4 stream (interval=0.5 beats) eBPM equals song BPM, matching the BSMG wiki definition.
 
-### Named Pattern Counts (`js/lib/scripts/annotate_batch.js` + `src/data/pattern_features_js.py`)
+### Named Pattern Counts + Geometry Features (`js/lib/scripts/annotate_batch.js` + `src/data/pattern_features_js.py`)
 
-The **JS annotator** (`js/lib/src/patterns.js`) is the single source of truth for named pattern detection. `annotate_batch.js` runs it over all downloaded maps and outputs per-map counts. `pattern_features_js.py` calls it via subprocess and merges the counts (prefixed `js_`) into the statistical features CSV.
+The **JS annotator** (`js/lib/src/patterns.js`) is the single source of truth for named pattern detection. `annotate_batch.js` runs it over all downloaded maps and outputs per-map counts plus geometry features. `pattern_features_js.py` calls it via subprocess and merges the output into the statistical features CSV.
+
+**Geometry features** (from `bsmap`'s `NoteJumpSpeed` class and swing module — no `js_` prefix, canonical names for training/inference parity):
+
+| Feature group | Features | Notes |
+|---|---|---|
+| NJS / jump | `njs`, `njs_offset`, `jump_distance`, `reaction_time`, `hjd` | From Info.dat via `findDatInfo()` |
+| JD optimal | `jd_optimal_low`, `jd_optimal_high`, `jd_delta_low`, `jd_delta_high` | bsmap `NoteJumpSpeed.calcJdOptimal()` |
+| NPS | `nps_mapped`, `peak_nps_4beat`, `peak_nps_8beat`, `peak_nps_16beat` | Notes/second (not notes/beat) |
+| SPS | `sps_total/red/blue_{avg,median,peak}` | ScoreSaber-canonical swing algorithm via `bsmap/extensions/swing` |
 
 Pattern counts produced (each also has a `_rate` variant normalised by note count):
 
@@ -171,39 +200,60 @@ Pattern counts produced (each also has a `_rate` variant normalised by note coun
 
 ### Model Training (`src/models/baseline.py`)
 
-Trains 7 algorithms (LogisticRegression, RandomForest, XGBoost, LightGBM, DecisionTree, SVM, KNN) on the metadata features CSV. Drops non-numeric and ID columns; applies `StandardScaler` + `LabelEncoder`. Explicitly drops any remaining `Balanced` rows as a safety net.
+Trains 7 algorithms (LogisticRegression, RandomForest, XGBoost, LightGBM, DecisionTree, SVM, KNN) in **parallel** (`joblib.Parallel`). Drops non-numeric and ID columns; applies `SimpleImputer(median)` + `StandardScaler` + `LabelEncoder`. Explicitly drops any remaining `Balanced` rows. Runs in ~13 s.
 
-**Current best** (metadata features only): XGBoost — 66.98% accuracy, 66.59% F1 (5-fold CV: 64.26% ± 0.95%). Pattern features from `map_parser.py` are expected to close the gap toward the 80%+ target.
+**Current best** (untuned): XGBoost — **86.87% accuracy, 86.62% F1** (5-fold CV: 84.69% ± 2.42%).
+**Current best** (tuned): LightGBM — **88.89% accuracy, 88.80% F1** (CV F1: 85.13%).
+
+### Hyperparameter Tuning (`src/models/tune.py`)
+
+Runs Optuna TPE Bayesian optimisation over 4 models (LightGBM, XGBoost, RandomForest, GradientBoosting), 100 trials each. Objective: 5-fold CV F1 (weighted) with eBPM-split sample weights for the Extreme class. CV folds are parallelised (`joblib.Parallel(n_jobs=5)`); LightGBM/XGBoost/RF use `n_jobs=1` per fold to avoid nested parallelism.
+
+- LightGBM: ~70s (fastest, also best model — 88.89% test acc after tuning)
+- XGBoost: ~2 min
+- RandomForest: ~1.5 min
+- GradientBoosting: ~17 min (single-threaded per tree; best if strict skl2onnx compat needed)
+
+All 4 models can be exported to ONNX:
+- GradientBoosting / RandomForest → `skl2onnx` (native sklearn)
+- LightGBM / XGBoost → `onnxmltools` (opset 15)
 
 ### Directory Layout
 
 ```
 src/data/
-  features_v2.py          # metadata feature extraction (canonical)
   downloader.py           # BeatSaver map downloader
-  map_parser.py           # .dat file parser → statistical features only (eBPM, rotation, etc.)
-  pattern_features_js.py  # calls JS annotator, merges pattern counts into training CSV
+  map_parser.py           # .dat parser → statistical features (eBPM, rotation, etc.)
+  pattern_features_js.py  # calls JS annotator, merges output into training CSV
+  features_v2.py          # legacy metadata feature extraction (not used in current pipeline)
+  pattern_annotator.py    # per-note pattern labelling for the HTML viewer overlay only
 src/models/
-  baseline.py             # model training and evaluation
+  baseline.py             # train + evaluate 7 models in parallel (~13 s)
+  tune.py                 # Optuna tuning: LightGBM, XGBoost, RF, GB (100 trials, 5-fold parallel CV)
+  export_onnx.py          # export best model → ONNX for JS/browser inference
 js/lib/
-  src/parser.js           # beatmap .dat parser (v2/v3/v4)
+  src/parser.js           # beatmap .dat parser (v2/v3/v4) + findDatInfo() for NJS/offset
   src/patterns.js         # canonical pattern annotator (single source of truth)
-  src/features.js         # statistical feature extraction (mirrors map_parser.py)
-  scripts/annotate_batch.js  # batch runner: walks maps dir, outputs per-map pattern counts
+  src/features.js         # full feature vector: stats + patterns + NJS/NPS/SPS (bsmap)
+  scripts/annotate_batch.js      # batch: named pattern counts + NJS/NPS/SPS per map
+  scripts/compute_features_batch.js  # batch: full feature vector (training/inference parity check)
 data/raw/maps/            # downloaded + extracted map zips (gitignored)
 data/processed/
-  features.csv                   # metadata features (529→503 maps after Balanced exclusion)
   pattern_features.csv           # statistical features from map_parser.py
-  pattern_features_merged.csv    # merged: statistical + JS pattern counts (training input)
-  category_distribution.csv
+  pattern_features_merged.csv    # training input: stats + JS patterns + NJS/NPS/SPS (225 cols)
+  js_features.csv                # feature vector from compute_features_batch.js (used by export)
   feature_stats_by_category.json
-docs/patterns/       # 45 named pattern folders, each with wiki reference image(s)
-models/baseline_models/  # .pkl models + _metrics.json + _cv_results.json
-wiki/                # BSMG wiki git submodule (mapping docs, glossary, map format spec)
+models/
+  baseline_models/        # .pkl + _metrics.json per model
+  tuned/                  # Optuna result JSON + .pkl per model
+  onnx/                   # pattern_classifier.onnx + _meta.json
+docs/patterns/            # 45 named pattern folders with wiki reference images
+wiki/                     # BSMG wiki git submodule (map format docs)
 ```
 
-### Known Data Issues
+### Notes
 
-- NaN values in some `bsmap` JSON-derived features (missing keys) → SVM and KNN fail; Phase 2 task to impute
-- `pattern_features_merged.csv` only exists once maps are downloaded, parsed, and JS-annotated — baseline training currently uses `features.csv` only
-- The JS annotator is the single source of truth for pattern detection; `pattern_annotator.py` is used only for the HTML viewer overlay
+- NaN values in JS-computed features for maps with no notes in a given window are imputed with column median in both `baseline.py` and `tune.py`.
+- `pattern_features_merged.csv` is the canonical training input — regenerate it with `pattern_features_js.py` after downloading/re-downloading maps.
+- The JS annotator is the single source of truth for pattern detection; `pattern_annotator.py` is used only for the HTML viewer overlay.
+- Geometry columns from `annotate_batch.js` (`njs`, `nps_*`, `sps_*`, etc.) keep their canonical names (no `js_` prefix) so training and inference use identical feature names.

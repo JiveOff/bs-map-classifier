@@ -2,7 +2,7 @@
 
 ML classifier for Beat Saber custom maps into 5 categories: **Tech**, **Speed**, **Accuracy**, **Standard**, **Extreme**.
 
-The primary signal comes from note-level pattern features extracted directly from `.dat` map files — what a player actually has to hit, not summary metadata. The pattern-only ONNX classifier reaches **84.57% CV F1** (103 features, GradientBoosting, Optuna-tuned). It runs entirely in browser and Node.js with no BeatSaver metadata API required.
+The primary signal comes from note-level pattern features extracted directly from `.dat` map files — what a player actually has to hit, not summary metadata. The ONNX classifier reaches **88.89% accuracy / 85.13% CV F1** (125 features including NJS, NPS, SPS via bsmap, LightGBM + Optuna-tuned, exported via onnxmltools). It runs entirely in browser and Node.js with no BeatSaver metadata API required.
 
 ## Categories
 
@@ -92,21 +92,7 @@ brew install libomp  # macOS only, required for XGBoost
 
 ## Full Pipeline
 
-### Step 1 — Metadata features
-
-Extract numeric features from the `analysisMetadata` JSON embedded in the source CSV. Produces ~72 features per map (NPS, SPS, NJS, parity stats, eBPM, etc.).
-
-```bash
-python src/data/features_v2.py \
-  --csv dataset_wc_pooling.csv \
-  --output data/processed/features.csv
-```
-
-Output: `data/processed/features.csv` (502 maps × 72 features)
-
----
-
-### Step 2 — Download map zips
+### Step 1 — Download map zips
 
 Download the actual `.zip` files from the BeatSaver API and extract them. Each map lands at `data/raw/maps/<category>/<key>/` with two sidecar files: `_beatsaver.json` (full API response) and `_dataset.json` (difficulty/characteristic/BPM needed by the parser).
 
@@ -124,9 +110,9 @@ Output: `data/raw/maps/<category>/<key>/*.dat` + sidecars
 
 ---
 
-### Step 3 — Pattern features
+### Step 2 — Statistical features
 
-Parse the labelled difficulty's `.dat` file for each map and extract note-level features. Handles beatmap formats v2, v3, and v4.
+Parse the labelled difficulty's `.dat` file for each map and extract note-level statistical features. Handles beatmap formats v2, v3, and v4.
 
 ```bash
 python src/data/map_parser.py \
@@ -134,95 +120,107 @@ python src/data/map_parser.py \
   --output data/processed/pattern_features.csv
 ```
 
-Output: `data/processed/pattern_features.csv` (493 maps × 202 features)
+Output: `data/processed/pattern_features.csv` (493 maps × 128 features)
 
 **Feature groups:**
 - Lane/layer histograms, direction histograms, hand balance
 - eBPM per hand (mean/median/max/p90), timing variability, rotation
 - Arc and chain rates, wall density
-- 39 named pattern counts + rates (streams, crossovers, doubles, DDs, scissors, towers, loloppes, hooks, bomb resets, etc.)
-- 72 windowed features: 16-beat window aggregates (max/mean/std/p90/p10/peak\_ratio) for note density, crossover rate, eBPM, stream rate, and more
+- 72 windowed features: 16-beat window aggregates for note density, crossover rate, eBPM, stream rate, etc.
 
 ---
 
-### Step 4 — Merge features
+### Step 3 — JS pattern counts + geometry features
 
-Join metadata features and pattern features on the map key to produce the full training set.
-
-```python
-import pandas as pd
-
-meta    = pd.read_csv('data/processed/features.csv')
-pattern = pd.read_csv('data/processed/pattern_features.csv')
-merged  = meta.merge(pattern, left_on='key', right_on='map_key', suffixes=('', '_pat'))
-merged.to_csv('data/processed/features_merged.csv', index=False)
-```
-
-Output: `data/processed/features_merged.csv` (473 maps × 274 columns, 263 numeric after dropping ID columns)
-
----
-
-### Step 5 — Baseline training
-
-Train 7 models (Logistic Regression, Random Forest, XGBoost, LightGBM, Decision Tree, SVM, KNN) with median imputation + standard scaling. Results saved as `.pkl` + `_metrics.json`.
+Run the Node.js annotator over all downloaded maps. Produces named pattern counts **and** NJS/NPS/SPS geometry features computed via [`bsmap`](https://www.npmjs.com/package/bsmap). Merges with the statistical features from Step 2.
 
 ```bash
-# On merged features (recommended)
-python src/models/baseline.py \
-  --features data/processed/features_merged.csv \
-  --output models/baseline_models \
-  --cross_validate
+python src/data/pattern_features_js.py \
+  --maps data/raw/maps \
+  --base-features data/processed/pattern_features.csv \
+  --output data/processed/pattern_features_merged.csv
+```
 
-# On metadata only (faster, lower ceiling)
+Output: `data/processed/pattern_features_merged.csv` (493 maps × 225 features)
+
+> **Requires Node.js ≥18** and `pnpm install` in `js/lib/`.
+
+**Pattern counts** (prefixed `js_`, 28 types, each with a `_rate` variant):
+streams, crossovers, doubles, DDs, scissors, towers, loloppes, hooks, bomb resets, stacks, gallops, flicks, jumps, handclaps, vision blocks, and more.
+
+**Geometry features** (canonical names, no prefix — shared with JS inference):
+
+| Group | Features | Signal |
+|---|---|---|
+| NJS / jump | `njs`, `njs_offset`, `jump_distance`, `reaction_time`, `hjd` | Lower RT → harder to read |
+| JD quality | `jd_optimal_low/high`, `jd_delta_low/high` | JD outside optimal range |
+| NPS | `nps_mapped`, `peak_nps_4/8/16beat` | Burst density → Speed/Extreme |
+| SPS | `sps_total/red/blue_{avg,median,peak}` | ScoreSaber-canonical swing density |
+
+---
+
+### Step 4 — Baseline training
+
+Train 7 models in parallel (~13 s). Results saved as `.pkl` + `_metrics.json`.
+
+```bash
 python src/models/baseline.py \
-  --features data/processed/features.csv \
+  --features data/processed/pattern_features_merged.csv \
   --output models/baseline_models \
   --cross_validate
 ```
 
 Output: `models/baseline_models/<model>.pkl` + `<model>_metrics.json`
 
+| Model | Accuracy | F1 |
+|---|---|---|
+| XGBoost | 86.87% | 86.62% |
+| LightGBM | 85.86% | 85.66% |
+| Logistic Regression | 85.86% | 85.63% |
+| Gradient Boosting | 85.86% | 85.61% |
+| Random Forest | 83.84% | 83.66% |
+
 ---
 
-### Step 6 — Hyperparameter tuning
+### Step 5 — Hyperparameter tuning
 
-Run Optuna Bayesian optimisation (TPE sampler, 150 trials each) over XGBoost, LightGBM, GradientBoosting, and RandomForest. Objective: 5-fold CV F1 (weighted).
+Run Optuna TPE Bayesian optimisation over LightGBM, XGBoost, RandomForest, and GradientBoosting. Objective: 5-fold CV F1 (weighted) with eBPM-split Extreme class weights. CV folds are parallelised.
 
 ```bash
 python src/models/tune.py \
-  --features data/processed/features_merged.csv \
-  --trials 150
+  --features data/processed/pattern_features_merged.csv \
+  --trials 100
 
 # Subset of models only:
-python src/models/tune.py --models xgboost lgbm
+python src/models/tune.py --models random_forest gradient_boosting
 ```
 
 Output: `models/tuned/<model>.pkl` + `<model>_result.json`
 
-| Model | CV F1 | Test Acc | Test F1 |
-|-------|-------|----------|---------|
-| **Random Forest** | **88.54%** | **82.11%** | **81.68%** |
-| XGBoost | 87.97% | 81.05% | 80.84% |
-| LightGBM | 87.97% | 81.05% | 80.92% |
-| Gradient Boosting | 87.40% | 82.11% | 81.61% |
+**Tuning results (100 trials):**
+
+| Model | Time | CV F1 | Test Acc | Test F1 |
+|---|---|---|---|---|
+| **LightGBM** | ~70s | 85.13% | **88.89%** | **88.80%** |
+| Gradient Boosting | ~17m | 84.93% | 86.87% | 86.95% |
+| XGBoost | ~2m | 85.33% | 83.84% | 83.70% |
+| Random Forest | ~1.5m | 84.66% | 82.83% | 82.53% |
+
+All 4 models are ONNX-exportable:
+- GradientBoosting / RandomForest → `skl2onnx` (native sklearn)
+- LightGBM / XGBoost → `onnxmltools` (opset 15)
 
 ---
 
-### Step 7 — ONNX export
+### Step 6 — ONNX export
 
-Export models to ONNX with full preprocessing params embedded in a `*_meta.json` sidecar. Any runtime (Python, JavaScript, etc.) can reproduce the sklearn pipeline without sklearn.
+Export the best model to ONNX for the JS/browser inference pipeline.
 
 ```bash
-python src/models/export_onnx.py
+python src/models/export_onnx.py --maps data/raw/maps
 ```
 
-Three models are exported:
-
-| File | Source | Features | Use case |
-|------|--------|----------|----------|
-| `gradient_boosting.onnx` | Tuned GB from `models/tuned/` | 263 merged | Best accuracy |
-| `random_forest.onnx` | Tuned RF from `models/tuned/` | 263 merged | Best CV F1 (88.54%) |
-| `pattern_classifier.onnx` | Fresh GB trained here | 202 pattern-only | JS/browser — no metadata API needed |
+The export script runs `compute_features_batch.js` to get the exact JS feature vector, trains a fresh GradientBoosting with the best Optuna params + eBPM-split weights, and exports.
 
 Each ONNX file ships with a `*_meta.json` containing:
 - `features` — ordered feature name list
@@ -230,7 +228,7 @@ Each ONNX file ships with a `*_meta.json` containing:
 - `imputer_medians` — per-feature median for NaN imputation
 - `scaler_mean` / `scaler_scale` — StandardScaler parameters
 
-Output: `models/onnx/*.onnx` + `models/onnx/*_meta.json`
+Output: `models/onnx/pattern_classifier.onnx` + `models/onnx/pattern_classifier_meta.json`
 
 ---
 
@@ -239,50 +237,56 @@ Output: `models/onnx/*.onnx` + `models/onnx/*_meta.json`
 ```
 src/
   data/
-    features_v2.py             # Step 1 — metadata feature extraction
-    downloader.py              # Step 2 — BeatSaver map downloader
-    map_parser.py              # Step 3 — .dat parser → 202 pattern features
-    pattern_annotator.py       # per-note pattern labelling (used by map_parser)
+    downloader.py              # Step 1 — BeatSaver map downloader
+    map_parser.py              # Step 2 — .dat parser → statistical features
+    pattern_features_js.py     # Step 3 — calls JS annotator, merges features
+    pattern_annotator.py       # per-note pattern labelling (HTML viewer overlay only)
+    features_v2.py             # legacy metadata feature extraction
   models/
-    baseline.py                # Step 5 — train + evaluate 7 baseline models
-    tune.py                    # Step 6 — Optuna hyperparameter tuning
-    export_onnx.py             # Step 7 — export to ONNX
+    baseline.py                # Step 4 — train + evaluate 7 models in parallel
+    tune.py                    # Step 5 — Optuna tuning (LightGBM/XGBoost/RF/GB)
+    export_onnx.py             # Step 6 — export to ONNX
+js/lib/                        # bs-map-classifier npm package
+  src/
+    parser.js                  #   beatmap .dat parser (v2/v3/v4) + findDatInfo()
+    patterns.js                #   canonical pattern annotator (single source of truth)
+    features.js                #   full feature vector (stats + patterns + NJS/NPS/SPS)
+    classify.js                #   ONNX inference entry point
+  scripts/
+    annotate_batch.js          #   batch: pattern counts + NJS/NPS/SPS per map
+    compute_features_batch.js  #   batch: full feature vector (parity check)
+  models/                      #   pattern_classifier.onnx + _meta.json
+  dist/                        #   CJS bundle + embedded.mjs
+  types/                       #   TypeScript definitions
 data/
   raw/maps/                    # downloaded + extracted map zips (gitignored)
   processed/
-    feature_stats_by_category.json  # per-category feature statistics
+    pattern_features.csv       # statistical features from map_parser.py
+    pattern_features_merged.csv  # training input (225 cols)
+    js_features.csv            # canonical JS feature vector for ONNX export
+    feature_stats_by_category.json
 models/
   baseline_models/             # _metrics.json per model (+ .pkl, gitignored)
   tuned/                       # Optuna result JSON per model (+ .pkl, gitignored)
-  onnx/                        # .onnx + _meta.json (3 exported models)
-js/
-  lib/                         # bs-map-classifier npm package
-    src/                       #   ESM source (parser, features, classify, patterns)
-    models/                    #   pattern_classifier.onnx + _meta.json
-    dist/                      #   CJS bundle + embedded.mjs (model baked in as base64)
-    types/                     #   TypeScript definitions
-  extension/                   # bs-pattern-overlay browser extension + userscript
-    src/                       #   content script + entry points
-    public/                    #   manifest.json, popup.html, injected.js
-notebooks/
-  test_classifier.ipynb        # classify any BeatSaver map interactively
+  onnx/                        # pattern_classifier.onnx + _meta.json
 docs/
   RESULTS.md                   # detailed results and per-class breakdowns
-  PATTERNS.md                  # pattern type reference
-  patterns/                    # reference images per pattern type
+  PATTERNS.md                  # pattern type reference with images
 wiki/                          # BSMG wiki submodule (map format docs)
 ```
 
 ## Results summary
 
-Full progression from metadata-only to the final tuned models:
+Full progression from metadata-only to current best:
 
-| Stage | CV F1 |
-|-------|-------|
-| Metadata only (XGBoost baseline) | 64.3% |
-| JS pattern pipeline (103 features, untuned) | 82.97% |
-| + Extreme eBPM-split weighting | 84.03% |
-| + Optuna tuning (100 trials) | **84.57%** |
+| Stage | Features | Best acc | CV F1 |
+|-------|----------|----------|-------|
+| Metadata only (XGBoost) | 72 | 66.98% | 64.3% |
+| + JS pattern pipeline (untuned) | 103 | 82.97% | — |
+| + Extreme eBPM-split weighting | 103 | — | 84.03% |
+| + Optuna tuning (100 trials) | 103 | — | 84.57% |
+| + NJS / NPS / SPS features (bsmap, untuned) | 223 | 86.87% | 84.69% |
+| **+ Optuna tuning, LightGBM (100 trials)** | **223** | **88.89%** | **85.13%** |
 
 See [`docs/RESULTS.md`](docs/RESULTS.md) for full per-class breakdowns and finding notes.
 

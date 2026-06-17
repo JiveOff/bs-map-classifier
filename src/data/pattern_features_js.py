@@ -105,10 +105,22 @@ def merge_with_base(js_df: pd.DataFrame, base_path: Path) -> pd.DataFrame:
     logger.info(f'Base features: {len(base_df)} rows, {len(base_df.columns)} cols')
     logger.info(f'JS features:   {len(js_df)} rows, {len(js_df.columns)} cols')
 
-    # Prefix JS columns (except the join keys)
+    # Geometry features computed by bsmap keep their canonical names (no js_ prefix)
+    # so that training and inference use identical feature names.
+    # Only raw pattern counts get the js_ prefix.
     join_keys = {'map_key', 'category'}
+    no_prefix = {
+        'n_notes',
+        'njs', 'njs_offset', 'jump_distance', 'reaction_time', 'hjd',
+        'jd_optimal_low', 'jd_optimal_high', 'jd_delta_low', 'jd_delta_high',
+        'nps_mapped', 'peak_nps_4beat', 'peak_nps_8beat', 'peak_nps_16beat',
+        'sps_total_avg', 'sps_total_median', 'sps_total_peak',
+        'sps_red_avg', 'sps_red_median', 'sps_red_peak',
+        'sps_blue_avg', 'sps_blue_median', 'sps_blue_peak',
+    }
     js_rename = {
-        c: f'js_{c}' for c in js_df.columns
+        c: (c if c in no_prefix else f'js_{c}')
+        for c in js_df.columns
         if c not in join_keys
     }
     js_df_prefixed = js_df.rename(columns=js_rename)

@@ -128,23 +128,47 @@ function parseBeatmap(data) {
  * @returns {string} filename
  */
 function findDatFilename(infoDat, characteristic, difficulty) {
+  return findDatInfo(infoDat, characteristic, difficulty).filename;
+}
+
+/**
+ * Locate the .dat filename and extract NJS / NJS offset for a given
+ * characteristic + difficulty from a parsed Info.dat object.
+ *
+ * @param {object} infoDat
+ * @param {string} characteristic
+ * @param {string} difficulty
+ * @returns {{ filename: string, njs: number, njsOffset: number }}
+ */
+function findDatInfo(infoDat, characteristic, difficulty) {
   const cLow = characteristic.toLowerCase();
   const dLow = difficulty.toLowerCase();
 
-  // v2/v3
+  // v2/v3 — fields: _noteJumpMovementSpeed, _noteJumpStartBeatOffset
   for (const s of infoDat._difficultyBeatmapSets || []) {
     if ((s._beatmapCharacteristicName || '').toLowerCase() !== cLow) continue;
     for (const d of s._difficultyBeatmaps || []) {
-      if ((d._difficulty || '').toLowerCase() === dLow) return d._beatmapFilename;
+      if ((d._difficulty || '').toLowerCase() === dLow) {
+        return {
+          filename:  d._beatmapFilename,
+          njs:       parseFloat(d._noteJumpMovementSpeed)   || 0,
+          njsOffset: parseFloat(d._noteJumpStartBeatOffset) || 0,
+        };
+      }
     }
   }
-  // v4
+  // v4 — fields: noteJumpMovementSpeed, noteJumpStartBeatOffset
   for (const d of infoDat.difficultyBeatmaps || []) {
     if ((d.characteristic || '').toLowerCase() === cLow &&
-        (d.difficulty     || '').toLowerCase() === dLow) return d.beatmapDataFilename;
+        (d.difficulty     || '').toLowerCase() === dLow) {
+      return {
+        filename:  d.beatmapDataFilename,
+        njs:       parseFloat(d.noteJumpMovementSpeed)   || 0,
+        njsOffset: parseFloat(d.noteJumpStartBeatOffset) || 0,
+      };
+    }
   }
-  // Fallback
-  return `${difficulty}${characteristic}.dat`;
+  return { filename: `${difficulty}${characteristic}.dat`, njs: 0, njsOffset: 0 };
 }
 
-export { parseBeatmap, findDatFilename };
+export { parseBeatmap, findDatFilename, findDatInfo };

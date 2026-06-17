@@ -1,5 +1,7 @@
 'use strict';
 import { annotatePatterns } from './patterns.js';
+import { NoteJumpSpeed } from 'bsmap';
+import { count as swingCount } from 'bsmap/extensions/swing';
 /**
  * features.js — JavaScript port of map_parser.py
  *
@@ -146,6 +148,86 @@ function countJumps(hand, maxBeats = 2) {
     if (Math.sqrt(dx*dx + dy*dy) >= 2) c++;
   }
   return c;
+}
+
+// ── SPS (Swings Per Second) via bsmap ────────────────────────────────────────
+// Adapts our note format ({beat,x,y,color,direction}) to bsmap's expected
+// shape ({time,posX,posY,color,direction}) and builds a minimal TimeProcessor
+// for constant-BPM maps.
+
+function computeSPS(notes, bpm) {
+  if (!notes.length) return { total: {}, red: {}, blue: {} };
+
+  const secPerBeat = 60 / bpm;
+  const timeProc = {
+    bpm,
+    toRealTime:  beat    => beat * secPerBeat,
+    toBeatTime:  seconds => seconds / secPerBeat,
+  };
+
+  // Map our note format to bsmap's expected properties
+  const bsmapNotes = notes.map(n => ({
+    time:      n.beat,
+    posX:      n.x,
+    posY:      n.y,
+    color:     n.color,
+    direction: n.direction,
+  }));
+
+  const lastNote   = bsmapNotes[bsmapNotes.length - 1];
+  const firstNote  = bsmapNotes[0];
+  const duration   = timeProc.toRealTime(lastNote.time) + 1;  // +1 so last second bin exists
+
+  const swing = swingCount(bsmapNotes, duration, timeProc);
+  const swingTotal = swing.left.map((v, i) => v + swing.right[i]);
+
+  function spsStats(arr) {
+    const nonZero = arr.filter(v => v > 0);
+    if (!nonZero.length) return { avg: 0, median: 0, peak: 0, total: 0 };
+    const mapDurSec = timeProc.toRealTime(lastNote.time - firstNote.time) || 1;
+    return {
+      avg:    arr.reduce((a, b) => a + b, 0) / mapDurSec,
+      median: median(nonZero),
+      peak:   calcMaxRollingSps(arr, 10),
+      total:  arr.reduce((a, b) => a + b, 0),
+    };
+  }
+
+  return {
+    total: spsStats(swingTotal),
+    red:   spsStats(swing.left),
+    blue:  spsStats(swing.right),
+  };
+}
+
+function calcMaxRollingSps(arr, window) {
+  if (!arr.length) return 0;
+  if (arr.length <= window) return arr.reduce((a, b) => a + b, 0) / arr.length;
+  let cur = arr.slice(0, window).reduce((a, b) => a + b, 0);
+  let max = cur;
+  for (let i = 0; i < arr.length - window; i++) {
+    cur = cur - arr[i] + arr[i + window];
+    if (cur > max) max = cur;
+  }
+  return max / window;
+}
+
+// ── Peak NPS at multiple window sizes ────────────────────────────────────────
+
+function peakNPS(notes, bpm, windowBeats) {
+  if (notes.length < 2) return 0;
+  const secPerBeat = 60 / bpm;
+  const windowSec  = windowBeats * secPerBeat;
+  let maxNps = 0;
+  let lo = 0;
+  for (let hi = 0; hi < notes.length; hi++) {
+    const tHi = notes[hi].beat * secPerBeat;
+    while ((tHi - notes[lo].beat * secPerBeat) > windowSec) lo++;
+    const count = hi - lo + 1;
+    const span  = Math.max(tHi - notes[lo].beat * secPerBeat, windowSec);
+    maxNps = Math.max(maxNps, count / span);
+  }
+  return maxNps;
 }
 
 // ── aggregatePatterns — uses patterns.js (single source of truth) ────────────
@@ -361,7 +443,7 @@ function computeWindowedFeatures(notes, obstacles, bpm, windowBeats = WINDOW_BEA
  * @param {Note[]}     bombs     - optional
  * @returns {Object}  map of feature name → float value
  */
-function computeFeatures(notes, obstacles = [], arcs = [], chains = [], bpm = 120, bombs = []) {
+function computeFeatures(notes, obstacles = [], arcs = [], chains = [], bpm = 120, bombs = [], njs = 0, njsOffset = 0) {
   const feats = {};
   const n = notes.length;
   if (!n) return feats;
@@ -444,6 +526,28 @@ function computeFeatures(notes, obstacles = [], arcs = [], chains = [], bpm = 12
   feats.map_duration_beats = mapDuration;
   feats.note_density       = n / mapDuration;
 
+  // True NPS (notes per second) — distinct from note_density which is per beat
+  const secPerBeat      = 60 / bpm;
+  const mapDurationSec  = Math.max(mapDuration * secPerBeat, 0.001);
+  feats.nps_mapped      = n / mapDurationSec;
+  feats.peak_nps_4beat  = peakNPS(notesSorted, bpm, 4);
+  feats.peak_nps_8beat  = peakNPS(notesSorted, bpm, 8);
+  feats.peak_nps_16beat = peakNPS(notesSorted, bpm, 16);
+
+  // SPS (Swings Per Second) — canonical Beat Games / ScoreSaber algorithm via bsmap
+  {
+    const sps = computeSPS(notesSorted, bpm);
+    feats.sps_total_avg    = sps.total.avg;
+    feats.sps_total_median = sps.total.median;
+    feats.sps_total_peak   = sps.total.peak;
+    feats.sps_red_avg      = sps.red.avg;
+    feats.sps_red_median   = sps.red.median;
+    feats.sps_red_peak     = sps.red.peak;
+    feats.sps_blue_avg     = sps.blue.avg;
+    feats.sps_blue_median  = sps.blue.median;
+    feats.sps_blue_peak    = sps.blue.peak;
+  }
+
   // Named pattern counts — via patterns.js (single source of truth)
   const patternCounts = aggregatePatterns(notesSorted, bpm, obstacles || [], bombs || []);
   Object.assign(feats, patternCounts);
@@ -465,6 +569,24 @@ function computeFeatures(notes, obstacles = [], arcs = [], chains = [], bpm = 12
   ];
   for (const key of RATE_KEYS) {
     if (key in feats) feats[`${key}_rate`] = feats[key] / n;
+  }
+
+  // NJS / jump distance / reaction time
+  // Use bsmap's NoteJumpSpeed which replicates Beat Games' HJD algorithm exactly.
+  // Falls back to difficulty-based defaults when njs is absent from Info.dat.
+  {
+    const effectiveNjs = njs > 0 ? njs : 10;
+    const njsObj = new NoteJumpSpeed(bpm, effectiveNjs, njsOffset);
+    feats.njs            = effectiveNjs;
+    feats.njs_offset     = njsOffset;
+    feats.jump_distance  = njsObj.jd;
+    feats.reaction_time  = njsObj.reactionTime;   // seconds
+    feats.hjd            = njsObj.hjd;            // beats
+    const [jdLow, jdHigh] = njsObj.calcJdOptimal();
+    feats.jd_optimal_low  = jdLow;
+    feats.jd_optimal_high = jdHigh;
+    feats.jd_delta_low    = feats.jump_distance - jdLow;   // negative = too short
+    feats.jd_delta_high   = feats.jump_distance - jdHigh;  // positive = too long
   }
 
   // n_notes_parsed (metadata only — not a training feature)

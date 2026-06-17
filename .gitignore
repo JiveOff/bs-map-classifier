@@ -30,6 +30,7 @@ data/processed/js_features.json
 data/processed/js_pattern_counts.json
 data/processed/category_distribution.csv
 data/processed/feature_stats_by_category.json
+data/processed/js_pattern_counts_new.json
 
 # Raw map downloads (5+ GB, re-downloadable via downloader.py)
 data/raw/

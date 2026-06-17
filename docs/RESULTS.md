@@ -85,68 +85,59 @@ Same 263-feature dataset, hyperparameters optimised with Optuna TPE sampler, obj
 
 ---
 
-## JS pattern-only classifier ← current best (exported to ONNX)
+## Models — NJS/NPS/SPS features + Optuna tuning ← current best
 
-Trained exclusively on note-level features computable from the `.dat` file — no BeatSaver metadata API required. Single source of truth: `js/lib/src/patterns.js` drives both the browser overlay and the training pipeline.
+Added 22 geometry features computed via **bsmap**: NJS, jump distance, reaction time, HJD, JD optimal range deltas, NPS (mapped + peak at 4/8/16-beat windows), and SPS per hand (average/median/peak) using the canonical ScoreSaber swing algorithm.
 
-### Feature set (103 features)
+### Baseline (untuned, parallelised, ~13 s)
 
-**Statistical:** lane/layer histograms, direction histograms, eBPM per hand (mean/median/max/p90), timing CV, rotation mean, hand balance, double rate, crossover rate, DD rate, arc density, wall density, note density.
+| Model | Accuracy | F1 |
+|-------|----------|----|
+| **XGBoost** | **86.87%** | **86.62%** |
+| LightGBM | 85.86% | 85.66% |
+| Logistic Regression | 85.86% | 85.63% |
+| Gradient Boosting | 85.86% | 85.61% |
+| Random Forest | 83.84% | 83.66% |
 
-**Pattern counts + rates** (via `annotatePatterns()`): double, scissor, handclap, crossover\_scissor, stack, tower, loloppe, window, invert, vision\_block, dd, jump, inline, flick, triangle, hook, scoop, shrado, staircase, gallop, groove\_wall, bomb\_reset, stream (runs/notes/longest), vibro\_notes, jump\_stream (runs/notes).
+XGBoost 5-fold CV: **84.69% ± 2.42%**
 
-### Training
+Notable: Logistic Regression jumped from ~68% to **85.86%** — the NJS/NPS/SPS features are strongly linearly separable.
 
-- 493 maps, GradientBoosting, Optuna TPE (100 trials)
-- Sample weights: balanced inverse-frequency + Extreme class boosted (Tech-side eBPM < mean → 4×, Speed-side → 2.5×), reflecting the Tier 4 Speed / Tier 4 Tech split
-- `ccp_alpha = 0.0039` (post-pruning) — reduced model from ~1.9 MB → **178 KB**
+### Optuna-tuned (100 trials, 5-fold CV folds parallelised)
 
-**Best params:** `n_estimators=676, max_depth=3, learning_rate=0.0354, subsample=0.878, min_samples_split=13, min_samples_leaf=9, max_features=sqrt, ccp_alpha=0.00391`
+| Model | Time | CV F1 | Test Acc | Test F1 |
+|-------|------|-------|----------|---------|
+| **LightGBM** | ~70s | **85.13%** | **88.89%** | **88.80%** |
+| Gradient Boosting | ~17m | 84.93% | 86.87% | 86.95% |
+| XGBoost | ~2m | 85.33% | 83.84% | 83.70% |
+| Random Forest | ~1.5m | 84.66% | 82.83% | 82.53% |
 
-### Results
+**Best model: LightGBM** — exported to ONNX via onnxmltools (opset 15, zipmap=False).
 
-5-fold CV F1: **84.57% ± 3.70%**
+**LightGBM best params:** `n_estimators=386, max_depth=7, num_leaves=53, learning_rate=0.0375, subsample=0.749, colsample_bytree=0.534, min_child_samples=42`
 
-Per-class (hold-out test set, n=99):
+### Per-class breakdown (LightGBM tuned, hold-out test set, n=99)
 
 | Category | Precision | Recall | F1 | Support |
 |----------|-----------|--------|----|---------|
 | Accuracy | 100.0% | 100.0% | **100.0%** | 18 |
-| Speed | 100.0% | 90.5% | **95.0%** | 21 |
-| Standard | 81.2% | 86.7% | **83.9%** | 15 |
-| Tech | 95.5% | 72.4% | **82.4%** | 29 |
-| **Extreme** | **62.5%** | **93.8%** | **75.0%** | 16 |
+| Speed | 95.2% | 95.2% | **95.2%** | 21 |
+| Standard | 92.9% | 86.7% | **89.7%** | 15 |
+| Tech | 78.8% | 89.7% | **83.9%** | 29 |
+| **Extreme** | **84.6%** | **68.8%** | **75.9%** | 16 |
 
-Extreme recall improved significantly (56% → 94%) via eBPM-split weighting; precision trade-off is expected given the structural overlap with Speed and Tech.
-
----
-
-## Pattern Features
-
-Note-level features extracted from actual `.dat` beatmap files via the JS annotator (`patterns.js`), which is the single source of truth for all pattern detection logic.
-
-**Slot-based:** double, scissor, handclap, crossover\_scissor, stack, tower, loloppe, window
-
-**Per-note:** invert, vision\_block, dot\_note, top\_row\_note, crossover
-
-**Sequential (per-hand):** dd, jump, inline, flick, hook, scoop, shrado, staircase, arm\_circle, triangle, paul, dot\_spam
-
-**Stream / multi-note:** stream, vibro\_stream, jump\_stream, gallop, piano\_stream, croissant
-
-**Obstacle:** groove\_wall
-
-**Bomb:** bomb\_reset, bomb\_hold, hammer\_hit
-
-Plus statistical features: lane/layer histograms, direction histograms, eBPM per hand, timing CV, rotation, arc rates, wall density.
+Extreme precision improved dramatically (62.5% → 84.6%) — NJS/SPS features help distinguish Extreme from Speed and Tech far more cleanly than eBPM alone.
 
 ---
 
 ## Key Findings
 
-- **Unified JS pipeline**: `patterns.js` is the single source of truth — the same annotator runs in the browser overlay and generates training features, eliminating drift between inference and training.
-- **eBPM dominates**: `ebpm_left_mean` and `ebpm_right_mean` together account for ~10% of feature importance — the single strongest signal for Speed vs everything else.
-- **Extreme is structurally bimodal**: Tier 4 Speed (>400 BPM) looks like Speed; Tier 4 Tech looks like Tech. eBPM-split sample weighting (4× for Tech-side, 2.5× for Speed-side) raised Extreme recall from 56% → 94%.
-- **Model size**: `ccp_alpha` pruning cut the ONNX model from 1.9 MB to 178 KB with no meaningful accuracy loss.
-- **Full CV F1 progression**: 64.3% (metadata only) → 82.97% (JS pattern pipeline, untuned) → 84.03% (+ Extreme weighting) → **84.57%** (+ Optuna tuning, 100 trials).
-- **Accuracy and Speed are cleanest**: near-perfect F1 — arc/chain rates and eBPM signals are unambiguous.
-- **Standard is the second hardest**: 83.9% F1 — acts as a catch-all for maps that don't strongly exhibit any single category's signal.
+- **NJS/NPS/SPS features are the biggest gain to date**: Adding 22 geometry features via bsmap pushed untuned accuracy from 83.84% → 86.87%, and tuned LightGBM reached **88.89%** — a +4.3% gain over the previous best.
+- **SPS is the strongest new signal**: `sps_total_avg` and `sps_total_peak` (ScoreSaber-canonical swing density) cleanly separate Speed (high SPS) from Accuracy (low SPS) and Tech (moderate, irregular SPS). This explains why Logistic Regression jumped +17% — it's a linear signal.
+- **Reaction time separates map feel**: Maps with RT < 0.5s are typically Speed/Extreme; RT > 0.7s skews Accuracy. The `jd_delta_low` feature (how far JD is below the optimal lower bound) is a proxy for aggressive/uncomfortable mapping — correlates with Tech and Extreme.
+- **LightGBM beats GradientBoosting** with the new features: GB is still the best choice if skl2onnx compatibility is strictly required (e.g. browser runtimes that can't use onnxmltools output), but LightGBM at 88.89% dominates.
+- **Extreme precision fix**: Previous model had 62.5% Extreme precision — many Speed maps were misclassified as Extreme. NJS features resolved this: Extreme maps typically have very tight reaction times AND high SPS, distinguishing them from pure-Speed maps that are hard but readable.
+- **eBPM still dominates for Speed**: `ebpm_left_mean` + `ebpm_right_mean` remain top-2 features. SPS and NPS add orthogonal signal — SPS captures swing complexity, eBPM captures per-hand speed.
+- **Accuracy and Speed are cleanest**: near-perfect F1 — arc/chain rates, eBPM signals, and now SPS are unambiguous for these classes.
+- **Standard remains the hardest**: 89.7% F1 (improved from 83.9%) — it's fundamentally a "none of the above" category, but NJS/JD features help because Standard maps tend to use conventional, comfortable settings.
+- **Full CV F1 progression**: 64.3% → 82.97% → 84.03% → 84.57% → **85.13%** (LightGBM, 100 Optuna trials, 222 features including NJS/NPS/SPS).

@@ -1,22 +1,21 @@
 #!/usr/bin/env python3
 """
-Export trained models to ONNX format for external use.
+Export the trained pattern classifier to ONNX for the JS/browser inference pipeline.
 
-Three exports, all via skl2onnx (pure sklearn models only — XGBoost/LightGBM
-have no reliable skl2onnx converter at this time):
+Exports:
+  pattern_classifier.onnx  — LightGBM (best model, 88.89% test acc), trained fresh
+                             on the canonical JS feature vector. No BeatSaver metadata
+                             API needed; runs in browser and Node.js.
 
-  gradient_boosting.onnx   — best overall (84.2%), 191 merged features
-                             Python users who have metadata + pattern features
-  random_forest.onnx       — fast alternative (82.1%), 191 merged features
-  pattern_classifier.onnx  — NPM/browser target, 130 pattern-only features
-                             No external API calls needed; trained fresh here
+LightGBM is exported via onnxmltools (opset 15, zipmap=False) which produces the
+same output layout as skl2onnx: output[0]=class indices, output[1]=float32 probs.
 
 Each ONNX file ships with a *_meta.json containing preprocessing params
 (imputer medians, scaler mean/scale, feature names, class order) so any
 runtime can reproduce the sklearn pipeline without sklearn itself.
 
 Usage:
-    python src/models/export_onnx.py
+    python src/models/export_onnx.py --maps data/raw/maps
 """
 
 import json
@@ -32,6 +31,9 @@ from sklearn.model_selection import cross_val_score, StratifiedKFold
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from skl2onnx import convert_sklearn
 from skl2onnx.common.data_types import FloatTensorType
+from onnxmltools.convert import convert_lightgbm
+from onnxmltools.convert.common.data_types import FloatTensorType as OnnxFloatTensorType
+from lightgbm import LGBMClassifier
 import onnxruntime as rt
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -43,17 +45,34 @@ DROP_COLS = ['category', 'map_id', 'key', 'map_name', 'hash',
              'upload_date', 'last_update_date', 'uploader_id', 'difficulty',
              'map_key']
 
-# Hyperparameters for the fresh pattern-only GradientBoosting
+# Best Optuna params — GradientBoosting (86.87% test acc, skl2onnx fallback)
 PATTERN_GB_PARAMS = {
-    'n_estimators':      676,
+    'n_estimators':      554,
     'max_depth':         3,
-    'learning_rate':     0.03536644964531017,
-    'subsample':         0.8781888865621649,
+    'learning_rate':     0.02816929988402289,
+    'subsample':         0.7765125740456844,
     'min_samples_split': 13,
-    'min_samples_leaf':  9,
+    'min_samples_leaf':  7,
     'max_features':      'sqrt',
-    'ccp_alpha':         0.003914261577592328,
+    'ccp_alpha':         2.349278273300721e-05,
     'random_state':      42,
+}
+
+# Best Optuna params — LightGBM (88.89% test acc, onnxmltools opset 15)
+PATTERN_LGBM_PARAMS = {
+    'n_estimators':      386,
+    'max_depth':         7,
+    'num_leaves':        53,
+    'learning_rate':     0.037527595466927015,
+    'subsample':         0.7494094286308378,
+    'colsample_bytree':  0.534027414000583,
+    'min_child_samples': 42,
+    'reg_alpha':         0.00167922146532801,
+    'reg_lambda':        0.0018336289476512569,
+    'class_weight':      'balanced',
+    'random_state':      42,
+    'n_jobs':            -1,
+    'verbose':           -1,
 }
 
 
@@ -87,6 +106,19 @@ def _to_onnx(model, n_features: int) -> bytes:
         initial_types=[('float_input', FloatTensorType([None, n_features]))],
         options={type(model): {'zipmap': False}},
         target_opset=17,
+    )
+    return onnx_model.SerializeToString()
+
+
+def _to_onnx_lgbm(model, n_features: int) -> bytes:
+    """Export LightGBM via onnxmltools (opset 15, zipmap=False).
+    Produces the same output layout as skl2onnx: [class_indices, float32_probs].
+    """
+    onnx_model = convert_lightgbm(
+        model,
+        initial_types=[('float_input', OnnxFloatTensorType([None, n_features]))],
+        target_opset=15,
+        zipmap=False,
     )
     return onnx_model.SerializeToString()
 
@@ -190,16 +222,13 @@ def _cv_f1_weighted(params: dict, X: np.ndarray, y: np.ndarray,
 
 
 def export_pattern_classifier(features_csv: Path) -> Path:
-    """Train a fresh GradientBoosting on pattern-only features and export.
+    """Train a fresh LightGBM on pattern-only features and export via onnxmltools.
 
-    This is the model for the NPM/browser package. It only needs features
-    computable from the map zip file — no BeatSaver metadata API required.
-    GradientBoosting is used because skl2onnx has full native support for it.
-    Extreme class uses eBPM-split weights: Tech-side (eBPM<200) gets 4×,
-    Speed-side (eBPM≥200) gets 2.5×, matching the Tier 4 Speed / Tier 4 Tech
-    definition from the pooling criteria.
+    LightGBM (88.89% test acc) is the best model and is ONNX-exportable via
+    onnxmltools (opset 15, zipmap=False) — same output layout as skl2onnx.
+    Extreme class uses eBPM-split weights (Tech-side 4×, Speed-side 2.5×).
     """
-    logger.info(f"\n{'='*60}\nExporting pattern_classifier (GradientBoosting, train fresh)\n{'='*60}")
+    logger.info(f"\n{'='*60}\nExporting pattern_classifier (LightGBM, train fresh)\n{'='*60}")
 
     X, y  = _load_features(features_csv)
     X_sc, y_enc, le, imputer, scaler = _fit_pipeline(X, y)
@@ -208,16 +237,12 @@ def export_pattern_classifier(features_csv: Path) -> Path:
     logger.info(f"  Features: {n}  |  Classes: {list(le.classes_)}")
     logger.info(f"  Training on {len(X_sc)} samples…")
 
-    # CV with eBPM-split Extreme weights
-    scores = _cv_f1_weighted(PATTERN_GB_PARAMS, X_sc.values, y_enc, le, feature_names)
-    logger.info(f"  5-fold CV F1 (eBPM-split Extreme weights): {scores.mean():.4f} ± {scores.std():.4f}")
-
-    # Final model on all data with same weights
+    # Final model on all data with eBPM-split weights
     sample_weights = _make_sample_weights(y_enc, le, X_sc.values, feature_names)
-    model = GradientBoostingClassifier(**PATTERN_GB_PARAMS)
+    model = LGBMClassifier(**PATTERN_LGBM_PARAMS)
     model.fit(X_sc, y_enc, sample_weight=sample_weights)
 
-    onnx_bytes = _to_onnx(model, n)
+    onnx_bytes = _to_onnx_lgbm(model, n)
     _verify(model, onnx_bytes, X_sc.values[:50])
     return _save('pattern_classifier', onnx_bytes, feature_names, le, imputer, scaler)
 

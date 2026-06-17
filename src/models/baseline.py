@@ -10,11 +10,12 @@ Usage:
 import argparse
 import json
 import logging
-import os
 from pathlib import Path
 from typing import Dict, Any, Optional
 import numpy as np
 import pandas as pd
+import joblib as _joblib
+from joblib import Parallel, delayed
 from sklearn.model_selection import train_test_split, cross_val_score, StratifiedKFold
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.impute import SimpleImputer
@@ -103,7 +104,7 @@ class BaselineModels:
         'gradient_boosting': {
             'class': GradientBoostingClassifier,
             'params': {
-                'n_estimators': 300,
+                'n_estimators': 100,
                 'max_depth': 4,
                 'learning_rate': 0.05,
                 'subsample': 0.8,
@@ -241,22 +242,32 @@ class BaselineModels:
             'confusion_matrix': cm.tolist(),
         }
 
+    def _train_one(self, model_name: str, config: dict, data: Dict[str, Any]):
+        if config['needs_scaling']:
+            X_tr, X_te = data['X_train_scaled'], data['X_test_scaled']
+        else:
+            X_tr, X_te = data['X_train_raw'], data['X_test_raw']
+        model = self.train_model(model_name, X_tr, data['y_train'])
+        if model is None:
+            return model_name, None, None
+        metrics = self.evaluate_model(model, X_te, data['y_test'], data['label_encoder'])
+        return model_name, model, metrics
+
     def train_and_evaluate_all(self, data: Dict[str, Any], output_dir: Path) -> None:
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        for model_name, config in self.MODEL_CONFIGS.items():
+        # Run all models in parallel; each model that uses n_jobs=-1 gets its own
+        # threads, while GB/LR/DT/SVM (single-threaded) fill remaining cores.
+        task_results = Parallel(n_jobs=-1, prefer='threads')(
+            delayed(self._train_one)(name, cfg, data)
+            for name, cfg in self.MODEL_CONFIGS.items()
+        )
+
+        for model_name, model, metrics in sorted(task_results, key=lambda r: r[0]):
             logger.info(f"\n{'='*60}\nModel: {model_name}\n{'='*60}")
-
-            if config['needs_scaling']:
-                X_tr, X_te = data['X_train_scaled'], data['X_test_scaled']
-            else:
-                X_tr, X_te = data['X_train_raw'], data['X_test_raw']
-
-            model = self.train_model(model_name, X_tr, data['y_train'])
             if model is None:
                 continue
 
-            metrics = self.evaluate_model(model, X_te, data['y_test'], data['label_encoder'])
             self.models[model_name] = model
             self.results[model_name] = metrics
 
@@ -265,7 +276,7 @@ class BaselineModels:
             logger.info(f"  Recall:    {metrics['recall']:.4f}")
             logger.info(f"  F1:        {metrics['f1']:.4f}")
 
-            joblib.dump(model, output_dir / f"{model_name}.pkl")
+            _joblib.dump(model, output_dir / f"{model_name}.pkl")
 
             metrics_out = {k: v for k, v in metrics.items() if k != 'confusion_matrix'}
             metrics_out['confusion_matrix'] = metrics['confusion_matrix']
@@ -312,7 +323,7 @@ class BaselineModels:
 
 def main():
     parser = argparse.ArgumentParser(description='Train and evaluate baseline ML models')
-    parser.add_argument('--features', type=str, default='data/processed/features_merged.csv')
+    parser.add_argument('--features', type=str, default='data/processed/pattern_features_merged.csv')
     parser.add_argument('--output', type=str, default='models/baseline_models')
     parser.add_argument('--test_size', type=float, default=0.2)
     parser.add_argument('--random_state', type=int, default=42)

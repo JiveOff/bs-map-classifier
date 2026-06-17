@@ -15,7 +15,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { parseBeatmap, findDatFilename } from '../src/parser.js';
+import { parseBeatmap, findDatInfo } from '../src/parser.js';
 import { computeFeatures } from '../src/features.js';
 
 // ── CLI args ───────────────────────────────────────────────────────────────
@@ -64,11 +64,11 @@ for (const category of fs.readdirSync(mapsDir).sort()) {
     const difficulty     = dataset.difficulty     || 'ExpertPlus';
     const bpm            = parseFloat(dataset.bpm) || 120;
 
-    const infoDat = findInfoDat(mapDir);
-    const datName = infoDat
-      ? findDatFilename(infoDat, characteristic, difficulty)
-      : `${difficulty}${characteristic}.dat`;
-    const datPath = path.join(mapDir, datName);
+    const infoDat  = findInfoDat(mapDir);
+    const datInfo  = infoDat
+      ? findDatInfo(infoDat, characteristic, difficulty)
+      : { filename: `${difficulty}${characteristic}.dat`, njs: 0, njsOffset: 0 };
+    const datPath  = path.join(mapDir, datInfo.filename);
     if (!fs.existsSync(datPath)) { skipped++; continue; }
 
     try {
@@ -76,7 +76,7 @@ for (const category of fs.readdirSync(mapsDir).sort()) {
       const parsed = parseBeatmap(raw);
       const feats  = computeFeatures(
         parsed.notes, parsed.obstacles, parsed.arcs, parsed.chains,
-        bpm, parsed.bombs
+        bpm, parsed.bombs, datInfo.njs, datInfo.njsOffset
       );
       results.push({ map_key: key, category, ...feats });
       ok++;
