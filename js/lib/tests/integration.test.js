@@ -43,11 +43,14 @@ const KNOWN_MAPS = [
   { key: '2ab61', expected: 'Speed',     label: 'Xronial Xero'                                  },
   { key: '276d6', expected: 'Speed',     label: 'Galaxy Burst'                                  },
   // Tech
-  { key: '20151', expected: 'Tech',      label: 'Maximizer'                                     },
   // Howl moved to BORDERLINE_MAPS — High Tech (Tier 3), model predicts Extreme
+  { key: '35be7', expected: 'Tech',      label: 'Show'                                          },
+  { key: '31f86', expected: 'Tech',      label: 'Anatasama'                                     },
+  { key: '370cf', expected: 'Tech',      label: 'Wildstar'                                      },
   // Standard
   { key: '1e95f', expected: 'Standard',  label: 'Title Track'                                   },
   { key: '206b2', expected: 'Standard',  label: 'AK-40000000'                                   },
+  { key: '20151', expected: 'Standard',  label: 'Maximizer'                                     },
   // Extreme
   { key: '3d561', expected: 'Extreme',   label: 'Lustre'                                        },
   // 999 moved to BORDERLINE_MAPS — Extreme Speed, model splits between Speed/Extreme
