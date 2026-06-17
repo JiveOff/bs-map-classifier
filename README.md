@@ -6,15 +6,15 @@ Classification is driven by note-level features extracted directly from `.dat` m
 
 ## Categories
 
-These are *typical* characteristics — categories are not rigidly defined and a map may blend several traits.
+These are *typical* characteristics derived from empirical analysis of the training dataset — categories are not rigidly defined and a map may blend several traits.
 
 | Category | Typical characteristics |
 |----------|------------------------|
-| **Tech** | Crossovers, parity breaks (DDs), triangles, inlines, high wall density, unconventional patterns |
-| **Speed** | Dense streams, high eBPM, fast jumps |
-| **Accuracy** | Structured swings, low parity breaks, emphasis on precision scoring |
-| **Standard** | Balanced mix of patterns, moderate density, approachable flow |
-| **Extreme** | Very high density and difficulty — towers, quads, walls, complex patterns at high speed |
+| **Tech** | High crossover rate (~36% of beats), lateral cut directions (left/right), frequent parity breaks (DD rate ~9%), high wall density. Pace is moderate — Tech is defined by spatial complexity, not speed. |
+| **Speed** | Highest eBPM, NPS, SPS, and NJS of all categories. Plays in a linear up/down/diagonal flow with almost no lateral cuts or crossovers. High rhythmic variability from alternating dense streams and wide jump intervals. |
+| **Accuracy** | Lowest eBPM, NPS, NJS, and note count. Near-zero parity breaks (DD rate ~0.8%), clean alternating swings (highest mean rotation), no lateral cuts. High reaction time from slow NJS. |
+| **Standard** | The centrist category — moderate on every metric with no strongly distinguishing signal. Sits between Tech and Accuracy in crossover rate, DD rate, and eBPM. |
+| **Extreme** | Combines Tech (high crossovers ~32%, highest wall density) and Speed (high eBPM, low reaction time) while exceeding both in DD rate and invert count. The most intense category across complexity and pace simultaneously. |
 
 ## Dataset & limitations
 
@@ -58,6 +58,8 @@ See [`js/lib/README.md`](js/lib/README.md) for the full API, and [`js/lib/exampl
 |---|---|
 | [`models/onnx/`](https://github.com/JiveOff/bs-map-classifier/tree/main/models/onnx) | Trained ONNX models + meta JSON (pattern-only, gradient boosting, random forest) |
 | [`data/processed/feature_stats_by_category.json`](https://github.com/JiveOff/bs-map-classifier/blob/main/data/processed/feature_stats_by_category.json) | Per-category feature statistics (mean, std, min, max) |
+| [`docs/FEATURES.md`](https://github.com/JiveOff/bs-map-classifier/blob/main/docs/FEATURES.md) | Description of every feature group and column used for training |
+| [`docs/EDA_CONCLUSIONS.md`](https://github.com/JiveOff/bs-map-classifier/blob/main/docs/EDA_CONCLUSIONS.md) | Empirical per-category analysis with key metrics and surprising findings |
 | [`docs/RESULTS.md`](https://github.com/JiveOff/bs-map-classifier/blob/main/docs/RESULTS.md) | Full model results with per-class breakdowns |
 | [`docs/PATTERNS.md`](https://github.com/JiveOff/bs-map-classifier/blob/main/docs/PATTERNS.md) | Pattern type reference with images |
 
