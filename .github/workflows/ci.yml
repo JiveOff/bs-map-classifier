@@ -97,9 +97,9 @@ jobs:
         working-directory: js/lib
         run: |
           node --input-type=module --eval "
-            import { loadClassifierFromBuffers } from './dist/embedded.mjs';
-            if (typeof loadClassifierFromBuffers !== 'function')
-              throw new Error('embedded.mjs missing loadClassifierFromBuffers');
+            import { loadEmbeddedClassifier } from './dist/embedded.mjs';
+            if (typeof loadEmbeddedClassifier !== 'function')
+              throw new Error('embedded.mjs missing loadEmbeddedClassifier');
             console.log('embedded.mjs export OK');
           "
 
