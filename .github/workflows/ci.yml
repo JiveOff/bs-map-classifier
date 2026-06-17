@@ -103,6 +103,40 @@ jobs:
             console.log('embedded.mjs export OK');
           "
 
+  integration:
+    name: Integration (live BeatSaver)
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: pnpm
+          cache-dependency-path: js/pnpm-lock.yaml
+
+      - name: Install dependencies
+        working-directory: js
+        run: pnpm install --ignore-scripts
+
+      - name: Download dist artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: lib-dist
+          path: js/lib/dist/
+
+      - name: Run integration tests
+        working-directory: js/lib
+        env:
+          INTEGRATION: '1'
+        run: node --test --test-reporter=spec tests/integration.test.js
+
   validate-onnx:
     name: Validate ONNX model
     runs-on: ubuntu-latest
