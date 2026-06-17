@@ -14,6 +14,23 @@ npm install onnxruntime-node   # Node.js
 npm install onnxruntime-web    # browser / bundler
 ```
 
+## Quick start — from BeatSaver
+
+```js
+import { loadFromKey } from 'bs-map-classifier/beatsaver';
+import { loadEmbeddedClassifier, extractPatternsAndClassifyMap } from 'bs-map-classifier/embedded';
+
+const clf = await loadEmbeddedClassifier();
+const { beatmap, bpm, songName } = await loadFromKey('2b120'); // BeatSaver map key
+
+const { classification } = await extractPatternsAndClassifyMap(beatmap, bpm, clf);
+console.log(`${songName} → ${classification.category} (${(classification.confidence * 100).toFixed(1)}%)`);
+```
+
+`loadFromKey(key, characteristic?, difficulty?)` fetches metadata + zip from BeatSaver, extracts the correct `.dat`, and returns a ready-to-classify `beatmap`. Use `loadFromHash(hash)` if you have the zip hash instead.
+
+> See [`examples/`](examples/) for runnable Node.js, browser (Vite), Vue, Bun, and WASM examples.
+
 ## Quick start — embedded model
 
 The `/embedded` subpath bundles the ONNX model at build time — no file paths, no network requests:
@@ -84,6 +101,15 @@ const result = await extractPatternsAndClassifyMap(parseBeatmap(datJson), bpm, c
 ```
 
 ## API
+
+### BeatSaver helpers (`bs-map-classifier/beatsaver`)
+
+| Function | Description |
+|---|---|
+| `loadFromKey(key, characteristic?, difficulty?)` | Fetch + parse a map by BeatSaver short key |
+| `loadFromHash(hash, characteristic?, difficulty?)` | Fetch + parse a map by zip hash |
+
+Both return `{ beatmap, bpm, njs, njsOffset, characteristic, difficulty, songName, songAuthor, mapAuthor }`.
 
 ### Loading
 

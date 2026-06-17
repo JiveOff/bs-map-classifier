@@ -26,29 +26,29 @@ The pooling database is closed but publicly accessible. Map poolers actively mai
 ## Using the classifier
 
 ```bash
-npm install bs-map-classifier onnxruntime-web
+pnpm add bs-map-classifier onnxruntime-web
+# bun add bs-map-classifier onnxruntime-web  # Bun works great too
 ```
 
 > **Note:** `onnxruntime-web` (WASM) works in Node.js and browsers alike. `onnxruntime-node` uses a native `.node` addon and will fail in environments where native addons are disabled (sandboxed runtimes, some CI setups, Deno, etc.) — prefer `onnxruntime-web` unless you have a specific reason to use the native runtime.
 
+**From BeatSaver** (fetches the zip automatically):
+
 ```js
-import { loadEmbeddedClassifier } from 'bs-map-classifier/embedded';
-import { parseBeatmap, findDatFilename, extractPatternsAndClassifyMap } from 'bs-map-classifier';
-import { readFile } from 'node:fs/promises';
+import { loadFromKey } from 'bs-map-classifier/beatsaver';
+import { loadEmbeddedClassifier, extractPatternsAndClassifyMap } from 'bs-map-classifier/embedded';
 
-const clf     = await loadEmbeddedClassifier();
-const infoDat = JSON.parse(await readFile('Info.dat', 'utf8'));
-const datJson = JSON.parse(await readFile(findDatFilename(infoDat, 'Standard', 'ExpertPlus'), 'utf8'));
-const result  = await extractPatternsAndClassifyMap(parseBeatmap(datJson), /* bpm */ 180, clf);
-
-console.log(result.classification.category);    // 'Tech'
-console.log(result.classification.confidence);  // 0.87
-console.log(result.patterns.length + ' patterns detected');
+const clf = await loadEmbeddedClassifier();
+const { beatmap, bpm, songName } = await loadFromKey('2b120');
+const { classification } = await extractPatternsAndClassifyMap(beatmap, bpm, clf);
+console.log(`${songName} → ${classification.category} (${(classification.confidence * 100).toFixed(1)}%)`);
 ```
 
-Try it instantly in your browser: **[Open in StackBlitz](https://stackblitz.com/edit/node-kehuegda?file=index.js)** · **[Web demo](https://jiveoff.github.io/bs-map-classifier/)**
+See [`js/lib/README.md`](js/lib/README.md) for the full API, and [`js/lib/examples/`](js/lib/examples/) for runnable Node.js, browser (Vite), Vue, Bun, and WASM examples.
 
-See [`js/lib/README.md`](js/lib/README.md) for the full API — browser usage, custom model paths, `annotatePatterns`, TypeScript types, CJS usage, and a complete BeatSaver fetch example.
+[![Open in StackBlitz](https://developer.stackblitz.com/img/open_in_stackblitz.svg)](https://stackblitz.com/github/JiveOff/bs-map-classifier/tree/main/js/lib/examples/node-wasm)
+
+**[Web demo](https://jiveoff.github.io/bs-map-classifier/)**
 
 ### Explore the outputs
 
