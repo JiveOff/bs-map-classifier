@@ -1,0 +1,4 @@
+allowBuilds:
+  onnxruntime-node: set this to true or false
+minimumReleaseAgeExclude:
+  - bs-map-classifier@1.1.0

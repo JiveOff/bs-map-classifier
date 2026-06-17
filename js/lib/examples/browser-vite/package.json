@@ -1,0 +1,18 @@
+{
+  "name": "bs-map-classifier-browser-example",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "bs-map-classifier": "^1.1.1",
+    "fflate": "^0.8.3",
+    "onnxruntime-web": "^1.26.0"
+  },
+  "devDependencies": {
+    "vite": "^6.0.0"
+  }
+}

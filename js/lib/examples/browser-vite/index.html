@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Beat Saber Map Classifier</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 640px; margin: 40px auto; padding: 0 16px; background: #0f0f0f; color: #e0e0e0; }
+    h1   { font-size: 1.4rem; color: #fff; margin-bottom: 4px; }
+    p    { color: #888; margin: 0 0 20px; font-size: 0.85rem; }
+    .row { display: flex; gap: 8px; margin-bottom: 16px; }
+    input  { flex: 1; padding: 8px 12px; border-radius: 6px; border: 1px solid #333; background: #1a1a1a; color: #fff; font-size: 0.9rem; }
+    button { padding: 8px 18px; border-radius: 6px; border: none; background: #4f46e5; color: #fff; cursor: pointer; font-size: 0.9rem; }
+    button:disabled { opacity: 0.5; cursor: default; }
+    #status { font-size: 0.8rem; color: #888; min-height: 1.2em; margin-bottom: 16px; }
+    #result { display: none; background: #1a1a1a; border-radius: 8px; padding: 16px; }
+    .song   { font-weight: 600; color: #fff; margin-bottom: 12px; }
+    .badge  { display: inline-block; padding: 4px 10px; border-radius: 4px; font-size: 0.8rem; font-weight: 600; margin-bottom: 12px; }
+    .bar-row   { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 0.8rem; }
+    .bar-label { width: 72px; text-align: right; color: #aaa; }
+    .bar-track { flex: 1; background: #2a2a2a; border-radius: 3px; height: 8px; overflow: hidden; }
+    .bar-fill  { height: 100%; border-radius: 3px; transition: width 0.4s ease; }
+    .bar-pct   { width: 44px; color: #aaa; }
+    .meta  { margin-top: 12px; font-size: 0.75rem; color: #666; display: flex; gap: 16px; flex-wrap: wrap; }
+    .meta span { color: #999; }
+  </style>
+</head>
+<body>
+  <h1>Beat Saber Map Classifier</h1>
+  <p>Enter a BeatSaver map key to classify it into Tech / Speed / Accuracy / Standard / Extreme.</p>
+
+  <div class="row">
+    <input id="key" placeholder="Map key (e.g. 2b120)" value="2b120" />
+    <input id="diff" placeholder="Difficulty" value="ExpertPlus" style="max-width:130px" />
+    <button id="btn">Classify</button>
+  </div>
+
+  <div id="status">Loading model…</div>
+  <div id="result">
+    <div class="song" id="song"></div>
+    <div class="badge" id="badge"></div>
+    <div id="bars"></div>
+    <div class="meta" id="meta"></div>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

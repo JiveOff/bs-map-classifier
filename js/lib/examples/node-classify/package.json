@@ -1,0 +1,12 @@
+{
+  "name": "bs-map-classifier-node-example",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node index.mjs"
+  },
+  "dependencies": {
+    "bs-map-classifier": "^1.1.0",
+    "onnxruntime-node": "^1.19.0"
+  }
+}

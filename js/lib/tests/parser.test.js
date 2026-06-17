@@ -1,7 +1,7 @@
 'use strict';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseBeatmap, findDatFilename } from '../src/parser.js';
+import { parseBeatmap, findDatFilename, findDatInfo } from '../src/parser.js';
 
 // ── parseBeatmap — v2 ─────────────────────────────────────────────────────────
 
@@ -263,4 +263,53 @@ test('findDatFilename v4: finds correct filename', () => {
 test('findDatFilename: falls back to pattern when not found', () => {
   const infoDat = {};
   assert.equal(findDatFilename(infoDat, 'Standard', 'ExpertPlus'), 'ExpertPlusStandard.dat');
+});
+
+// ── findDatInfo ───────────────────────────────────────────────────────────────
+
+test('findDatInfo v2: returns filename, njs, and njsOffset', () => {
+  const infoDat = {
+    _difficultyBeatmapSets: [
+      {
+        _beatmapCharacteristicName: 'Standard',
+        _difficultyBeatmaps: [
+          {
+            _difficulty: 'ExpertPlus',
+            _beatmapFilename: 'ExpertPlus.dat',
+            _noteJumpMovementSpeed: 18,
+            _noteJumpStartBeatOffset: 0.5,
+          },
+        ],
+      },
+    ],
+  };
+  const info = findDatInfo(infoDat, 'Standard', 'ExpertPlus');
+  assert.equal(info.filename,  'ExpertPlus.dat');
+  assert.equal(info.njs,       18);
+  assert.equal(info.njsOffset, 0.5);
+});
+
+test('findDatInfo v4: returns filename, njs, and njsOffset', () => {
+  const infoDat = {
+    difficultyBeatmaps: [
+      {
+        characteristic: 'Standard',
+        difficulty: 'ExpertPlus',
+        beatmapDataFilename: 'EP_data.dat',
+        noteJumpMovementSpeed: 20,
+        noteJumpStartBeatOffset: -0.5,
+      },
+    ],
+  };
+  const info = findDatInfo(infoDat, 'Standard', 'ExpertPlus');
+  assert.equal(info.filename,  'EP_data.dat');
+  assert.equal(info.njs,       20);
+  assert.equal(info.njsOffset, -0.5);
+});
+
+test('findDatInfo: falls back with zeroed njs when not found', () => {
+  const info = findDatInfo({}, 'Standard', 'ExpertPlus');
+  assert.equal(info.filename,  'ExpertPlusStandard.dat');
+  assert.equal(info.njs,       0);
+  assert.equal(info.njsOffset, 0);
 });

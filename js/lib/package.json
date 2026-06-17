@@ -81,6 +81,16 @@
       }
     },
     "./embedded": {
+      "node": {
+        "import": {
+          "types": "./types/index.d.ts",
+          "default": "./dist/embedded.node.mjs"
+        },
+        "require": {
+          "types": "./dist/cjs/embedded.d.ts",
+          "default": "./dist/cjs/embedded.js"
+        }
+      },
       "import": {
         "types": "./types/index.d.ts",
         "default": "./dist/embedded.mjs"

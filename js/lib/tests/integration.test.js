@@ -18,8 +18,9 @@ import { inflateRawSync } from 'node:zlib';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseBeatmap, findDatFilename } from '../src/parser.js';
+import { parseBeatmap, findDatFilename, findDatInfo } from '../src/parser.js';
 import { loadClassifier, classifyFromNotes } from '../src/classify.node.js';
+import { extractPatternsAndClassifyMap } from '../src/map.js';
 
 const __dirname   = dirname(fileURLToPath(import.meta.url));
 const FIXTURES    = resolve(__dirname, 'fixtures');
@@ -153,10 +154,10 @@ async function fetchMap(key, characteristic = 'Standard', difficulty = 'ExpertPl
 
   const zip      = parseZip(zipBuf);
   const infoDat  = JSON.parse((getEntry(zip, 'Info.dat') ?? getEntry(zip, 'info.dat')).toString('utf8'));
-  const datName    = findDatFilename(infoDat, characteristic, difficulty);
-  const datResult  = getDatEntry(zip, datName, characteristic, difficulty);
+  const datInfo    = findDatInfo(infoDat, characteristic, difficulty);
+  const datResult  = getDatEntry(zip, datInfo.filename, characteristic, difficulty);
   if (!datResult) throw new Error(
-    `Difficulty file "${datName}" not found in zip for ${key}. ` +
+    `Difficulty file "${datInfo.filename}" not found in zip for ${key}. ` +
     `Available .dat files: ${Object.keys(zip).filter(k => k.endsWith('.dat')).join(', ')}`
   );
   const datEntry = datResult.entry;
@@ -169,6 +170,8 @@ async function fetchMap(key, characteristic = 'Standard', difficulty = 'ExpertPl
     characteristic,
     difficulty,
     bpm,
+    njs:            datInfo.njs,
+    njsOffset:      datInfo.njsOffset,
     notes:          parsed.notes,
     obstacles:      parsed.obstacles,
     arcs:           parsed.arcs,
@@ -258,5 +261,73 @@ for (const { key, expected, label, characteristic = 'Standard', difficulty = 'Ex
       `"${label}": expected ${expected} in top 2 but got [${ranked.join(', ')}]. ` +
       `Scores: ${Object.entries(result.probabilities).sort((a,b)=>b[1]-a[1]).map(([c,p])=>`${c}=${(p*100).toFixed(1)}%`).join(' ')}`
     );
+  });
+}
+
+// ── extractPatternsAndClassifyMap integration tests ───────────────────────────
+// Tests the full high-level API end-to-end: parse → features+patterns → classify.
+// One representative map per category; njs/njsOffset flow through from Info.dat.
+
+const FULL_API_MAPS = [
+  { key: '33d42', expected: 'Accuracy', label: 'Longest Wave',       difficulty: 'Easy'   },
+  { key: '2636f', expected: 'Speed',    label: 'Seiten No Teriyaki'                        },
+  { key: '35be7', expected: 'Tech',     label: 'Show'                                      },
+  { key: '1e95f', expected: 'Standard', label: 'Title Track'                               },
+  { key: '3d561', expected: 'Extreme',  label: 'Lustre'                                    },
+];
+
+for (const { key, expected, label, characteristic = 'Standard', difficulty = 'ExpertPlus' } of FULL_API_MAPS) {
+  test(`[extractPatternsAndClassifyMap] ${label} (${key}) → ${expected}`, {
+    skip: !RUN ? SKIP_REASON : false,
+    timeout: 30_000,
+  }, async () => {
+    const clf = await getClassifier();
+    const map = await fetchMap(key, characteristic, difficulty);
+
+    const parsedBeatmap = {
+      notes:     map.notes,
+      obstacles: map.obstacles,
+      arcs:      map.arcs,
+      chains:    map.chains,
+      bombs:     map.bombs,
+      njs:       map.njs       ?? 0,
+      njsOffset: map.njsOffset ?? 0,
+    };
+
+    const result = await extractPatternsAndClassifyMap(parsedBeatmap, map.bpm, clf);
+
+    // Classification matches expected
+    assert.equal(
+      result.classification.category, expected,
+      `"${label}": expected ${expected} but got ${result.classification.category}. ` +
+      `Scores: ${Object.entries(result.classification.probabilities).sort((a,b)=>b[1]-a[1]).map(([c,p])=>`${c}=${(p*100).toFixed(1)}%`).join(' ')}`
+    );
+
+    // Output shape is complete
+    assert.ok(result.features && typeof result.features === 'object', 'features missing');
+    assert.ok(Array.isArray(result.patterns),                         'patterns missing');
+    assert.ok(Array.isArray(result.allNotes),                         'allNotes missing');
+    assert.ok(result.patternColors && typeof result.patternColors === 'object');
+
+    // Features are populated with real values
+    assert.ok(result.features.nps_mapped > 0,        'nps_mapped should be > 0');
+    assert.ok(result.features.ebpm_left_mean > 0,    'ebpm_left_mean should be > 0');
+    assert.equal(result.allNotes.length, map.notes.length, 'allNotes length should match note count');
+
+    // njs from Info.dat is reflected in features
+    if (map.njs > 0) {
+      assert.equal(result.features.njs, map.njs,
+        `features.njs (${result.features.njs}) should match Info.dat njs (${map.njs})`);
+      assert.ok(result.features.jump_distance > 0, 'jump_distance should be positive');
+      assert.ok(result.features.reaction_time  > 0, 'reaction_time should be positive');
+    }
+
+    // Patterns are detected on real maps
+    assert.ok(result.patterns.length > 0, `no patterns detected in "${label}" — expected at least one`);
+
+    // classification.category matches the top probability
+    const topClass = Object.entries(result.classification.probabilities)
+      .sort((a, b) => b[1] - a[1])[0][0];
+    assert.equal(result.classification.category, topClass);
   });
 }
