@@ -73,7 +73,7 @@ if (process.env.GITHUB_STEP_SUMMARY) {
     `| \`classifyMap\` median | ${fmt(median)} |`,
     `| \`classifyMap\` p95 | ${fmt(p95)} |`,
     '',
-    '_Flashes by Hommarju & Dollscythe (2b120) — 2088 notes_',
+    `_Flashes by Hommarju & Dollscythe (2b120) — 2088 notes, ${N} runs_`,
     '',
   ].join('\n'));
 }
