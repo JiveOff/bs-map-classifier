@@ -63,6 +63,20 @@ See [`js/lib/README.md`](js/lib/README.md) for the full API, and [`js/lib/exampl
 | [`docs/RESULTS.md`](https://github.com/JiveOff/bs-map-classifier/blob/main/docs/RESULTS.md) | Full model results with per-class breakdowns |
 | [`docs/PATTERNS.md`](https://github.com/JiveOff/bs-map-classifier/blob/main/docs/PATTERNS.md) | Pattern type reference with images |
 
+## Performance
+
+Measured on Apple M4, Node.js 20, WASM runtime (`onnxruntime-web`):
+
+| Metric | Result |
+|--------|--------|
+| `loadEmbeddedClassifier` (init) | ~135 ms |
+| `classifyMap` median | ~0.07 ms |
+| `classifyMap` p95 | ~0.20 ms |
+
+Init is a one-time cost — load the classifier once at startup and reuse it for every map. Per-map inference is sub-millisecond.
+
+Historical benchmark results tracked per commit: [`gh-benchmarks` branch](https://github.com/JiveOff/bs-map-classifier/tree/gh-benchmarks).
+
 ---
 
 ## Using the overlay

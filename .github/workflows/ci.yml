@@ -3,10 +3,14 @@ name: CI
 on:
   push:
     branches: ['**']
+    tags: ['v[0-9]*']
   pull_request:
+  schedule:
+    - cron: '0 2 * * *'   # nightly at 02:00 UTC
+  workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   checks: write
 
 jobs:
@@ -146,7 +150,7 @@ jobs:
         run: node --test --test-reporter=spec tests/integration.test.js
 
   validate-onnx:
-    name: Validate ONNX model
+    name: ONNX smoke test
     runs-on: ubuntu-latest
 
     steps:
@@ -159,7 +163,7 @@ jobs:
       - name: Install onnxruntime
         run: pip install onnxruntime numpy --quiet
 
-      - name: Validate pattern_classifier.onnx
+      - name: Smoke test — pattern_classifier.onnx loads and produces valid output
         run: |
           python - <<'EOF'
           import json, sys
@@ -192,3 +196,52 @@ jobs:
           predicted = meta['classes'][class_idx]
           print(f'OK — {n} features, prediction: {predicted} ({probs[0].max():.1%})')
           EOF
+
+  benchmark:
+    name: Benchmark
+    needs: build
+    runs-on: ubuntu-latest
+    # Only store results on main — PRs and branches still run the benchmark but don't push
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: pnpm
+          cache-dependency-path: js/pnpm-lock.yaml
+
+      - name: Install dependencies
+        working-directory: js
+        run: pnpm install --ignore-scripts
+
+      - name: Download dist artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: lib-dist
+          path: js/lib/dist/
+
+      - name: Run benchmark
+        working-directory: js/lib
+        env:
+          BENCHMARK_OUTPUT: benchmark-results.json
+        run: node scripts/benchmark.mjs
+
+      - name: Store benchmark results
+        uses: benchmark-action/github-action-benchmark@v1
+        if: github.ref == 'refs/heads/main'
+        with:
+          name: bs-map-classifier
+          tool: customSmallerIsBetter
+          output-file-path: js/lib/benchmark-results.json
+          gh-pages-branch: gh-benchmarks
+          benchmark-data-dir-path: benchmarks
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: true
+          comment-on-alert: true
+          alert-threshold: '150%'
+          fail-on-alert: false

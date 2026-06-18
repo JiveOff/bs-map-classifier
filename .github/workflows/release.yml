@@ -1,9 +1,9 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - 'v[0-9]*'
+  workflow_run:
+    workflows: ['CI']
+    types: [completed]
 
 permissions:
   id-token: write
@@ -12,10 +12,15 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    if: |
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      startsWith(github.event.workflow_run.head_branch, 'v')
 
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 0   # full history lets softprops generate accurate release notes
 
       - uses: pnpm/action-setup@v4
@@ -30,7 +35,7 @@ jobs:
       # ── Extract semver from tag (v1.2.3 → 1.2.3) ─────────────────────────
       - name: Extract version
         id: ver
-        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+        run: echo "VERSION=${{ github.event.workflow_run.head_branch }}" | sed 's/VERSION=v/VERSION=/' >> "$GITHUB_OUTPUT"
 
       # ── Patch version into every manifest that carries it ─────────────────
       - name: Patch versions
