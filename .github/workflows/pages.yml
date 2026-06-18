@@ -47,6 +47,16 @@ jobs:
         working-directory: js/lib/examples/vue-beatsaver
         run: pnpm run build
 
+      - name: Include benchmark results
+        run: |
+          git fetch origin gh-benchmarks 2>/dev/null || true
+          if git ls-remote --exit-code origin gh-benchmarks > /dev/null 2>&1; then
+            git checkout origin/gh-benchmarks -- benchmarks/ 2>/dev/null || true
+            if [ -d benchmarks ]; then
+              cp -r benchmarks js/lib/examples/vue-beatsaver/dist/benchmarks
+            fi
+          fi
+
       - uses: actions/configure-pages@v5
 
       - uses: actions/upload-pages-artifact@v3
