@@ -29,7 +29,7 @@ Measured on Apple M4, Node.js 20, `onnxruntime-web`:
 
 Init is a one-time cost — load the classifier once at startup and reuse it for every map. Per-map inference scales with note count.
 
-Historical results tracked per commit on the [`gh-benchmarks` branch](https://github.com/JiveOff/bs-map-classifier/tree/gh-benchmarks) — runs on GitHub Actions (`ubuntu-latest`).
+Historical results tracked per commit on the [`gh-benchmarks` branch](https://github.com/JiveOff/bs-map-classifier/tree/gh-benchmarks) — runs on GitHub Actions (`ubuntu-latest`). Absolute numbers are not meaningful on shared CI runners; use them to spot regressions, not as performance targets.
 
 ## Quick start — from BeatSaver
 
