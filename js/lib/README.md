@@ -20,15 +20,16 @@ npm install onnxruntime-node   # Node.js only (native addon, faster but less por
 
 Measured on Apple M4, Node.js 20, `onnxruntime-web`:
 
-| Metric | Result |
-|--------|--------|
-| `loadEmbeddedClassifier` (init) | ~135 ms |
-| `classifyMap` median | ~0.07 ms |
-| `classifyMap` p95 | ~0.20 ms |
+| Metric | Result | Map |
+|--------|--------|-----|
+| `loadEmbeddedClassifier` (init) | ~135 ms | — |
+| `classifyMap` median | ~0.06 ms | empty beatmap |
+| `classifyMap` median | ~6.2 ms | Flashes — 2088 notes |
+| `classifyMap` p95 | ~10.5 ms | Flashes — 2088 notes |
 
-Init is a one-time cost — load the classifier once at startup and reuse it for every map. Per-map inference is sub-millisecond.
+Init is a one-time cost — load the classifier once at startup and reuse it for every map. Per-map inference scales with note count.
 
-Historical results tracked per commit on the [`gh-benchmarks` branch](https://github.com/JiveOff/bs-map-classifier/tree/gh-benchmarks).
+Historical results tracked per commit on the [`gh-benchmarks` branch](https://github.com/JiveOff/bs-map-classifier/tree/gh-benchmarks) — runs on GitHub Actions (`ubuntu-latest`).
 
 ## Quick start — from BeatSaver
 

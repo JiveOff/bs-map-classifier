@@ -57,3 +57,6 @@ viewer/
 # Node.js (also covered by js/.gitignore for the JS workspace)
 node_modules
 **/node_modules
+
+# Benchmark output (generated locally by scripts/benchmark.mjs)
+js/lib/benchmark-results.json
