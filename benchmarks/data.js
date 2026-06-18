@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781817098399,
+  "lastUpdate": 1781817525099,
   "repoUrl": "https://github.com/JiveOff/bs-map-classifier",
   "entries": {
     "bs-map-classifier": [
@@ -155,6 +155,45 @@ window.BENCHMARK_DATA = {
           {
             "name": "classifyMap p95",
             "value": 27.646,
+            "unit": "ms"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "antoine@jiveoff.fr",
+            "name": "JiveOff",
+            "username": "JiveOff"
+          },
+          "committer": {
+            "email": "antoine@jiveoff.fr",
+            "name": "JiveOff",
+            "username": "JiveOff"
+          },
+          "distinct": true,
+          "id": "437be89f8336a9a9a0cfc12b582129b1d348234a",
+          "message": "fix: release pipeline",
+          "timestamp": "2026-06-18T23:17:39+02:00",
+          "tree_id": "c88492d737c98f639860fd900e29350914d98cf9",
+          "url": "https://github.com/JiveOff/bs-map-classifier/commit/437be89f8336a9a9a0cfc12b582129b1d348234a"
+        },
+        "date": 1781817524400,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Init (loadEmbeddedClassifier)",
+            "value": 286.46,
+            "unit": "ms"
+          },
+          {
+            "name": "classifyMap median",
+            "value": 17.066,
+            "unit": "ms"
+          },
+          {
+            "name": "classifyMap p95",
+            "value": 32.209,
             "unit": "ms"
           }
         ]
