@@ -1,24 +1,276 @@
-name: Release
+name: CI / Release
 
 on:
-  workflow_run:
-    workflows: ['CI']
-    types: [completed]
+  push:
+    branches: ['**', '!gh-benchmarks']
+    tags: ['v[0-9]*']
+  pull_request:
+  workflow_dispatch:
 
 permissions:
   id-token: write
-  contents: write   # required to create GitHub Releases
+  contents: write
+  checks: write
+
+# ── Build ──────────────────────────────────────────────────────────────────────
 
 jobs:
-  release:
+  build:
+    name: Build
     runs-on: ubuntu-latest
-    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && startsWith(github.event.workflow_run.head_branch, 'v')
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: pnpm
+          cache-dependency-path: js/pnpm-lock.yaml
+
+      - name: Install dependencies
+        working-directory: js
+        run: pnpm install --ignore-scripts
+
+      - name: Build library
+        working-directory: js
+        run: pnpm --filter bs-map-classifier run build
+
+      - name: Build extension & userscript
+        working-directory: js
+        run: pnpm --filter bs-pattern-overlay run build
+
+      - name: Install Vue demo
+        working-directory: js/lib/examples/vue-beatsaver
+        run: pnpm install
+
+      - name: Typecheck & build Vue demo
+        working-directory: js/lib/examples/vue-beatsaver
+        run: pnpm run build
+
+      - name: Upload dist artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lib-dist
+          path: js/lib/dist/
+
+# ── Test ───────────────────────────────────────────────────────────────────────
+
+  test:
+    name: Test (Node ${{ matrix.node }})
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['18', '20', '22', '24']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+          cache-dependency-path: js/pnpm-lock.yaml
+
+      - name: Install dependencies
+        working-directory: js
+        run: pnpm install --ignore-scripts
+
+      - name: Download dist artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: lib-dist
+          path: js/lib/dist/
+
+      - name: Unit tests (ESM)
+        working-directory: js/lib
+        run: node --test --test-reporter=spec tests/*.test.js
+
+      - name: Smoke test — CJS (require)
+        working-directory: js/lib
+        run: |
+          node -e "
+            const pkg = require('./dist/cjs/index.js');
+            const fns = ['loadClassifierFromBuffers', 'classifyMap', 'parseBeatmap', 'computeFeatures', 'annotatePatterns'];
+            for (const fn of fns) {
+              if (typeof pkg[fn] !== 'function') throw new Error('CJS missing export: ' + fn);
+            }
+            console.log('CJS exports OK:', fns.join(', '));
+          "
+
+      - name: Smoke test — embedded ESM bundle
+        working-directory: js/lib
+        run: |
+          node --input-type=module --eval "
+            import { loadEmbeddedClassifier } from './dist/embedded.mjs';
+            if (typeof loadEmbeddedClassifier !== 'function')
+              throw new Error('embedded.mjs missing loadEmbeddedClassifier');
+            console.log('embedded.mjs export OK');
+          "
+
+# ── Integration ────────────────────────────────────────────────────────────────
+
+  integration:
+    name: Integration (live BeatSaver)
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: pnpm
+          cache-dependency-path: js/pnpm-lock.yaml
+
+      - name: Install dependencies
+        working-directory: js
+        run: pnpm install --ignore-scripts
+
+      - name: Download dist artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: lib-dist
+          path: js/lib/dist/
+
+      - name: Run integration tests
+        working-directory: js/lib
+        env:
+          INTEGRATION: '1'
+        run: node --test --test-reporter=spec tests/integration.test.js
+
+# ── ONNX smoke test ────────────────────────────────────────────────────────────
+
+  validate-onnx:
+    name: ONNX smoke test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install onnxruntime
+        run: pip install onnxruntime numpy --quiet
+
+      - name: Smoke test — pattern_classifier.onnx
+        run: |
+          python - <<'EOF'
+          import json
+          import numpy as np
+          import onnxruntime as rt
+
+          CLASSES = {'Accuracy', 'Extreme', 'Speed', 'Standard', 'Tech'}
+          MODEL   = 'models/onnx/pattern_classifier.onnx'
+          META    = 'models/onnx/pattern_classifier_meta.json'
+
+          meta = json.loads(open(META).read())
+          n    = meta['n_features']
+          assert set(meta['classes']) == CLASSES, f"Unexpected classes: {meta['classes']}"
+          assert len(meta['imputer_medians']) == n, 'imputer_medians length mismatch'
+          assert len(meta['scaler_mean'])     == n, 'scaler_mean length mismatch'
+          assert len(meta['scaler_scale'])    == n, 'scaler_scale length mismatch'
+
+          sess     = rt.InferenceSession(MODEL)
+          inp_name = sess.get_inputs()[0].name
+          dummy    = np.zeros((1, n), dtype=np.float32)
+          labels, probs = sess.run(None, {inp_name: dummy})
+
+          assert labels.shape == (1,),   f'Unexpected label shape: {labels.shape}'
+          assert probs.shape  == (1, 5), f'Unexpected prob shape: {probs.shape}'
+          class_idx = int(labels[0])
+          assert 0 <= class_idx < len(meta['classes']), f'Class index out of range: {class_idx}'
+          assert abs(probs[0].sum() - 1.0) < 1e-4, 'Probabilities do not sum to 1'
+
+          predicted = meta['classes'][class_idx]
+          print(f'OK — {n} features, prediction: {predicted} ({probs[0].max():.1%})')
+          EOF
+
+# ── Benchmark ──────────────────────────────────────────────────────────────────
+
+  benchmark:
+    name: Benchmark
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: pnpm
+          cache-dependency-path: js/pnpm-lock.yaml
+
+      - name: Install dependencies
+        working-directory: js
+        run: pnpm install --ignore-scripts
+
+      - name: Download dist artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: lib-dist
+          path: js/lib/dist/
+
+      - name: Run benchmark
+        working-directory: js/lib
+        env:
+          BENCHMARK_OUTPUT: benchmark-results.json
+        run: node scripts/benchmark.mjs
+
+      - name: Store benchmark results
+        uses: benchmark-action/github-action-benchmark@v1
+        if: github.ref == 'refs/heads/main'
+        with:
+          name: bs-map-classifier
+          tool: customSmallerIsBetter
+          output-file-path: js/lib/benchmark-results.json
+          gh-pages-branch: gh-benchmarks
+          benchmark-data-dir-path: benchmarks
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: true
+          comment-on-alert: true
+          alert-threshold: '150%'
+          fail-on-alert: false
+
+# ── Release ────────────────────────────────────────────────────────────────────
+
+  release:
+    name: Release
+    needs: [build, test]
+    runs-on: ubuntu-latest
+    # Only on v-tags or non-main branch pushes (potential beta)
+    if: |
+      github.event_name == 'push' && (
+        startsWith(github.ref, 'refs/tags/v') ||
+        (github.ref != 'refs/heads/main' && github.ref != 'refs/heads/gh-benchmarks')
+      )
 
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
-          fetch-depth: 0   # full history lets softprops generate accurate release notes
+          fetch-depth: 0
 
       - uses: pnpm/action-setup@v4
         with:
@@ -29,17 +281,43 @@ jobs:
           node-version: '24'
           registry-url: 'https://registry.npmjs.org'
 
-      # ── Extract semver from tag (v1.2.3 → 1.2.3) ─────────────────────────
-      - name: Extract version
-        id: ver
+      # ── Determine release type ───────────────────────────────────────────────
+      # stable : vX.Y.Z tag (no prerelease suffix)
+      # beta   : vX.Y.Z-* tag  OR  non-main branch where package.json version has '-'
+      # skip   : non-main branch without a prerelease version
+      - name: Determine release type
+        id: rel
         run: |
-          TAG="${{ github.event.workflow_run.head_branch }}"
-          echo "VERSION=${TAG#v}" >> "$GITHUB_OUTPUT"
+          REF="${{ github.ref }}"
+          REF_NAME="${{ github.ref_name }}"
 
-      # ── Patch version into every manifest that carries it ─────────────────
-      - name: Patch versions
+          if [[ "$REF" == refs/tags/v* ]]; then
+            VERSION="${REF_NAME#v}"
+            if [[ "$VERSION" == *-* ]]; then
+              echo "type=beta"   >> "$GITHUB_OUTPUT"
+            else
+              echo "type=stable" >> "$GITHUB_OUTPUT"
+            fi
+            echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
+            echo "tag=v$VERSION"    >> "$GITHUB_OUTPUT"
+
+          else
+            # Branch push — check package.json for a prerelease version
+            VERSION=$(node -p "require('./js/lib/package.json').version")
+            if [[ "$VERSION" == *-* ]]; then
+              echo "type=beta"        >> "$GITHUB_OUTPUT"
+              echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
+              echo "tag=v$VERSION"    >> "$GITHUB_OUTPUT"
+            else
+              echo "type=skip" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+
+      # ── Patch versions into manifests (stable only) ──────────────────────────
+      - name: Patch versions (stable)
+        if: steps.rel.outputs.type == 'stable'
         env:
-          V: ${{ steps.ver.outputs.VERSION }}
+          V: ${{ steps.rel.outputs.VERSION }}
         run: |
           patch() {
             node -e "
@@ -53,51 +331,78 @@ jobs:
           patch js/extension/package.json
           patch js/extension/public/manifest.json
 
-      # ── Install workspace deps ─────────────────────────────────────────────
+      # ── Install & build ──────────────────────────────────────────────────────
       - name: Install dependencies
+        if: steps.rel.outputs.type != 'skip'
         working-directory: js
         run: pnpm install --ignore-scripts
 
-      # ── Build library: ESM source is ready; compile CJS ───────────────────
-      - name: Build library (CJS)
-        working-directory: js
-        run: pnpm --filter bs-map-classifier run build
+      - name: Download dist artifact
+        if: steps.rel.outputs.type != 'skip'
+        uses: actions/download-artifact@v4
+        with:
+          name: lib-dist
+          path: js/lib/dist/
 
-      # ── Build extension + self-contained userscript ────────────────────────
-      - name: Build extension & userscript
+      - name: Build extension & userscript (stable)
+        if: steps.rel.outputs.type == 'stable'
         working-directory: js
         env:
-          RELEASE_VERSION: ${{ steps.ver.outputs.VERSION }}
+          RELEASE_VERSION: ${{ steps.rel.outputs.VERSION }}
         run: pnpm --filter bs-pattern-overlay run build
 
-      # ── Package artifacts ──────────────────────────────────────────────────
-      - name: Package extension zip
+      # ── Package artifacts ────────────────────────────────────────────────────
+      - name: Package extension zip (stable)
+        if: steps.rel.outputs.type == 'stable'
         working-directory: js/dist/extension
-        run: zip -r ../../bs-pattern-overlay-v${{ steps.ver.outputs.VERSION }}.zip .
+        run: zip -r ../../bs-pattern-overlay-v${{ steps.rel.outputs.VERSION }}.zip .
 
       - name: Package library zip
+        if: steps.rel.outputs.type != 'skip'
         working-directory: js/lib
         run: |
-          zip -r ../bs-map-classifier-v${{ steps.ver.outputs.VERSION }}.zip \
+          zip -r ../bs-map-classifier-v${{ steps.rel.outputs.VERSION }}.zip \
             src/ dist/ models/ types/ package.json README.md
 
-      - name: Stage versioned userscript copy
+      - name: Stage versioned userscript copy (stable)
+        if: steps.rel.outputs.type == 'stable'
         working-directory: js
-        run: cp dist/bs-pattern-overlay.user.js bs-pattern-overlay-v${{ steps.ver.outputs.VERSION }}.user.js
+        run: cp dist/bs-pattern-overlay.user.js bs-pattern-overlay-v${{ steps.rel.outputs.VERSION }}.user.js
 
-      # ── GitHub Release with all four assets ───────────────────────────────
-      - name: Create GitHub Release
+      # ── GitHub Release ───────────────────────────────────────────────────────
+      - name: Create GitHub Release (stable)
+        if: steps.rel.outputs.type == 'stable'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event.workflow_run.head_branch }}
+          tag_name: ${{ steps.rel.outputs.tag }}
           generate_release_notes: true
+          prerelease: false
           files: |
             js/dist/bs-pattern-overlay.user.js
-            js/bs-pattern-overlay-v${{ steps.ver.outputs.VERSION }}.user.js
-            js/bs-pattern-overlay-v${{ steps.ver.outputs.VERSION }}.zip
-            js/bs-map-classifier-v${{ steps.ver.outputs.VERSION }}.zip
+            js/bs-pattern-overlay-v${{ steps.rel.outputs.VERSION }}.user.js
+            js/bs-pattern-overlay-v${{ steps.rel.outputs.VERSION }}.zip
+            js/bs-map-classifier-v${{ steps.rel.outputs.VERSION }}.zip
 
-      # ── Publish library to npm ─────────────────────────────────────────────
-      - name: Publish to npm
+      - name: Create GitHub Pre-Release (beta)
+        if: steps.rel.outputs.type == 'beta'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.rel.outputs.tag }}
+          generate_release_notes: true
+          prerelease: true
+          name: "${{ steps.rel.outputs.tag }} (beta)"
+          files: |
+            js/bs-map-classifier-v${{ steps.rel.outputs.VERSION }}.zip
+
+      # ── Publish to npm ───────────────────────────────────────────────────────
+      - name: Publish to npm (stable)
+        if: steps.rel.outputs.type == 'stable'
         working-directory: js/lib
         run: npm publish --access public --provenance
+
+      - name: Publish to npm (beta)
+        if: steps.rel.outputs.type == 'beta'
+        working-directory: js/lib
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public --tag beta
