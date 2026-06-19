@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781818119845,
+  "lastUpdate": 1781835487535,
   "repoUrl": "https://github.com/JiveOff/bs-map-classifier",
   "entries": {
     "bs-map-classifier": [
@@ -233,6 +233,45 @@ window.BENCHMARK_DATA = {
           {
             "name": "classifyMap p95",
             "value": 24.377,
+            "unit": "ms"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "antoine@jiveoff.fr",
+            "name": "JiveOff",
+            "username": "JiveOff"
+          },
+          "committer": {
+            "email": "antoine@jiveoff.fr",
+            "name": "JiveOff",
+            "username": "JiveOff"
+          },
+          "distinct": true,
+          "id": "e2f0f1fd69ddbfbf384e984a7db4d2c272674448",
+          "message": "ci: unify CI and release into single workflow, remove nightly\n\n- Merges ci.yml into release.yml (deleted ci.yml)\n- Single workflow: Build → Test → Integration → ONNX validate → Benchmark → Release\n- Release job uses github.ref directly — no workflow_run, no self-loop risk\n- Stable (vX.Y.Z) / Beta (vX.Y.Z-* or branch with prerelease version) / Skip\n- Removes nightly schedule trigger\n- Removes quality classifier checks (stay on beta-quality branch only)\n\nCo-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>",
+          "timestamp": "2026-06-19T04:17:05+02:00",
+          "tree_id": "6b64c65817ed936574680050592094039c35875c",
+          "url": "https://github.com/JiveOff/bs-map-classifier/commit/e2f0f1fd69ddbfbf384e984a7db4d2c272674448"
+        },
+        "date": 1781835486823,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Init (loadEmbeddedClassifier)",
+            "value": 276.4,
+            "unit": "ms"
+          },
+          {
+            "name": "classifyMap median",
+            "value": 12.107,
+            "unit": "ms"
+          },
+          {
+            "name": "classifyMap p95",
+            "value": 29.223,
             "unit": "ms"
           }
         ]
